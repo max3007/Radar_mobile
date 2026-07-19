@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#060a0e">
+  <title>RADAR &#183; Anzio</title>
+</head>
+<body>
+  <div id="hud">
+    <div class="dot" id="hudDot"></div>
+    <div>
+      <div class="title">RADAR</div>
+      <div id="hudFilters" style="font-size:8px;color:var(--muted);letter-spacing:1px;margin-top:1px;"></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="stCount">--</b><span>CONTATTI</span></div>
+      <div class="stat"><b id="stFast">--</b><span>MAX KT</span></div>
+      <div class="stat"><b id="stHigh">--</b><span>MAX FT</span></div>
+    </div>
+  </div>
+  <div id="errBar">SEGNALE PERSO &#183; RIPROVO&#8230;</div>
+
+  <div id="map"></div>
+  <div id="sweep"><div class="cone"></div></div>
+
+  <!-- Pannello ricerca avanzata -->
+  <div id="searchPanel" class="bsheet" style="z-index:1296;max-height:70vh;">
+    <div class="grab"></div>
+    <h2>CERCA AEREO</h2>
+    <input id="flightSearch" type="text" placeholder="Volo, compagnia, tipo, registrazione&#8230;" autocomplete="off"
+      style="width:100%;box-sizing:border-box;padding:10px;border-radius:8px;font-family:var(--mono);font-size:14px;background:var(--bg);color:var(--text);border:1px solid var(--phosphor-dim);text-transform:uppercase;">
+    <div id="quickChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+      <button class="chip" data-q="vicino">Pi&#249; vicino</button>
+      <button class="chip" data-q="alto">Pi&#249; alto</button>
+      <button class="chip" data-q="veloce">Pi&#249; veloce</button>
+      <button class="chip" data-q="atterraggio">In atterraggio</button>
+      <button class="chip" data-q="decollo">In decollo</button>
+    </div>
+    <div id="searchResults" style="margin-top:10px;"></div>
+    <div id="searchNote" style="font-size:10px;color:var(--muted);margin-top:6px;letter-spacing:0.5px;"></div>
+    <button id="flightSearchBtn" style="margin-top:10px;width:100%;padding:9px;border:1px solid var(--phosphor-dim);border-radius:8px;background:rgba(52,224,138,0.1);color:var(--phosphor);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;">CERCA NEL MONDO (numero volo)</button>
+  </div>
+
+  <!-- Overlay bussola MIRA: barra orizzonte, live con la rotazione del telefono -->
+  <div id="miraOverlay" style="display:none;position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);z-index:1100;text-align:center;pointer-events:auto;width:min(320px,86vw);">
+    <div id="miraBar" style="position:relative;height:64px;background:rgba(6,10,14,0.75);border:1px solid rgba(52,224,138,0.5);border-radius:12px;overflow:hidden;backdrop-filter:blur(2px);box-shadow:0 4px 24px rgba(0,0,0,0.5);">
+      <!-- Riga di scala -->
+      <div style="position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(52,224,138,0.3);"></div>
+      <!-- Tacche di riferimento -->
+      <div style="position:absolute;left:25%;top:38%;bottom:38%;width:1px;background:rgba(52,224,138,0.35);"></div>
+      <div style="position:absolute;left:75%;top:38%;bottom:38%;width:1px;background:rgba(52,224,138,0.35);"></div>
+      <!-- Mirino centrale fisso (dove deve arrivare la tacca) -->
+      <div style="position:absolute;left:50%;top:12%;bottom:12%;width:2px;background:var(--phosphor);transform:translateX(-50%);box-shadow:0 0 8px rgba(52,224,138,0.8);"></div>
+      <!-- Tacca aereo: scorre orizzontalmente -->
+      <div id="miraTick" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);transition:left 0.12s linear;font-size:26px;color:var(--amber);text-shadow:0 0 10px rgba(255,180,84,0.8);">&#9992;</div>
+      <!-- Bordo acceso quando allineato -->
+      <div id="miraLocked" style="display:none;position:absolute;inset:0;border-radius:12px;border:2px solid var(--phosphor);box-shadow:0 0 20px rgba(52,224,138,0.8) inset;animation:blink 1s infinite;"></div>
+    </div>
+    <div id="miraStatus" style="margin-top:10px;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--phosphor);background:rgba(6,10,14,0.8);border-radius:8px;padding:6px 12px;display:inline-block;">--</div>
+    <div id="miraSub" style="margin-top:5px;font-size:11px;color:var(--text);background:rgba(6,10,14,0.8);border-radius:8px;padding:4px 10px;display:inline-block;">alza lo sguardo di <span id="miraElev" style="color:var(--amber);font-weight:700;">--</span></div>
+    <div id="miraHint" style="margin-top:5px;font-size:9px;color:var(--muted);background:rgba(6,10,14,0.7);border-radius:6px;padding:3px 8px;display:inline-block;"></div>
+  </div>
+
+  <div id="fabs">
+    <button class="fab" id="btnSearch" title="Cerca aereo" aria-label="Cerca aereo">&#128269;</button>
+    <button class="fab small" id="btnMira" title="Punta verso l'aereo selezionato" aria-label="Bussola verso l'aereo">MIRA</button>
+    <button class="fab" id="btnSettings" title="Impostazioni" aria-label="Impostazioni">&#9881;</button>
+    <button class="fab small" id="btnAbove" title="Sopra di te" aria-label="Aereo piu vicino">SOPRA<br>DI TE</button>
+    <button class="fab" id="btnBoard" title="Classifica compagnie" aria-label="Classifica compagnie">&#9776;</button>
+    <button class="fab" id="btnCenter" title="Centra" aria-label="Centra la mappa">&#8853;</button>
+  </div>
+
+  <div id="board" class="bsheet">
+    <div class="grab"></div>
+    <h2>COMPAGNIE IN VOLO</h2>
+    <div id="boardList"></div>
+  </div>
+
+  <div id="settings" class="bsheet">
+    <div class="grab"></div>
+    <h2>IMPOSTAZIONI</h2>
+    <label>RAGGIO DI RICERCA: <span id="radiusVal">100</span> NM</label>
+    <input type="range" id="radiusSlider" min="25" max="250" step="25" value="100">
+    <label>COMPAGNIA</label>
+    <div style="position:relative;">
+      <input type="text" id="airlineSearch" placeholder="Tutte (digita per cercare)" autocomplete="off"
+        style="width:100%;padding:8px;border-radius:8px;font-family:var(--mono);font-size:13px;background:var(--bg);color:var(--text);border:1px solid var(--line);">
+      <div id="airlineList" style="display:none;position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--bg);border:1px solid var(--phosphor-dim);border-radius:8px;max-height:160px;overflow-y:auto;z-index:1400;"></div>
+    </div>
+    <div class="switch">
+      <span>Escludi aerei a terra</span>
+      <input type="checkbox" id="chkAirborne">
+    </div>
+    <div class="legend">
+      <span><i style="background:#ffb454"></i>&lt; 10k ft</span>
+      <span><i style="background:#34e08a"></i>10-25k ft</span>
+      <span><i style="background:#6fd3ff"></i>&gt; 25k ft</span>
+    </div>
+    <button id="applyBtn">APPLICA</button>
+  </div>
+
+  <div id="sheet" class="bsheet">
+    <div class="grab"></div>
+    <button id="closeFull" aria-label="Chiudi">&#10005;</button>
+    <div id="miniLine" style="display:none;padding-right:36px;">
+      <div style="font-size:13px;">
+        <span id="miniAirline" style="color:var(--muted);">--</span>
+        <span style="color:var(--phosphor);font-weight:700;"> &#183; <span id="miniFlight">--</span></span>
+      </div>
+      <div style="font-size:11px;margin-top:2px;color:var(--amber);"><span id="miniModel">--</span></div>
+      <div style="font-size:12px;margin-top:3px;">
+        <span id="miniOrig" style="color:var(--muted);">--</span>
+        <span style="color:var(--amber);"> &#10142; <span id="miniDest">--</span></span>
+      </div>
+      <div style="font-size:11px;margin-top:3px;color:var(--muted);">
+        <span id="miniAlt">--</span> &#183; <span id="miniSpd">--</span> &#183; <span id="miniDist" style="color:var(--phosphor);">--</span>
+      </div>
+      <div style="font-size:11px;margin-top:3px;color:var(--phosphor);letter-spacing:1px;"><span id="miniPhase">--</span></div>
+    </div>
+    <div id="emergBanner" style="display:none;margin:0 0 10px;padding:8px 10px;background:rgba(220,40,30,0.2);border:1px solid #dc2828;border-radius:8px;color:#ff6b5a;font-size:12px;font-weight:700;letter-spacing:1px;text-align:center;">&#9888; EMERGENZA</div>
+    <div id="shHeader">
+      <div id="shAirline">--</div>
+      <div id="shModel">--</div>
+    </div>
+    <div id="photoWrap"><img id="photo" alt="Foto aereo"><div id="photoCredit"></div></div>
+    <div id="photoNote" style="font-size:10px;color:var(--muted);margin-bottom:8px;"></div>
+    <div id="routeBox" style="display:none;margin-top:12px;padding:10px;background:rgba(255,180,84,0.06);border:1px solid var(--line);border-radius:8px;">
+      <div id="rFlight" style="font-size:20px;font-weight:700;color:var(--amber);text-align:center;letter-spacing:1px;">--</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;">
+        <div style="flex:1;">
+          <div id="rOrigCity" style="font-size:13px;font-weight:600;">--</div>
+          <div id="rOrigIata" style="font-size:10px;color:var(--muted);margin-top:2px;"></div>
+        </div>
+        <div style="color:var(--muted);font-size:16px;">&#10142;</div>
+        <div style="flex:1;text-align:right;">
+          <div id="rDestCity" style="font-size:13px;font-weight:600;">--</div>
+          <div id="rDestIata" style="font-size:10px;color:var(--muted);margin-top:2px;"></div>
+        </div>
+      </div>
+      <div style="font-size:8px;color:var(--muted);margin-top:6px;text-align:right;">rotta: adsbdb.com</div>
+    </div>
+    <div id="routeNote" style="font-size:10px;color:var(--muted);margin-top:8px;"></div>
+    <div id="shPhase">
+      <span class="phaseIco" id="phaseIco">&#9992;</span>
+      <span id="phaseTxt">--</span>
+      <span id="altBarWrap"><span id="altBar"></span></span>
+    </div>
+    <div class="grid">
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><path d="M12 3v18M12 3l-4 4M12 3l4 4"/></svg></span><div class="txt"><span>QUOTA</span><b id="shAlt">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><path d="M3 12h14M11 6l6 6-6 6"/></svg></span><div class="txt"><span>VELOCITA</span><b id="shSpd">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 12l4-6" fill="#34e08a" stroke="#34e08a"/></svg></span><div class="txt"><span>ROTTA</span><b id="shTrk">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><path d="M12 20V4M12 4l-5 5M12 4l5 5"/></svg></span><div class="txt"><span>VARIO</span><b id="shVario">--</b></div></div>
+    </div>
+    <div class="grid" id="techGrid" style="display:none;">
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M4 16c4-8 12-8 16 0"/><circle cx="12" cy="16" r="1.5" fill="#6fd3ff"/></svg></span><div class="txt"><span>MACH</span><b id="shMach">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M3 12h18M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg></span><div class="txt"><span>ASSETTO</span><b id="shRoll">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M3 8h13a3 3 0 100-6M3 14h16a3 3 0 110 6"/></svg></span><div class="txt"><span>VENTO</span><b id="shWind">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M12 3v10M12 13a3 3 0 103 3"/><circle cx="12" cy="16" r="3" fill="#6fd3ff"/></svg></span><div class="txt"><span>TEMP EST.</span><b id="shOat">--</b></div></div>
+    </div>
+    <div id="shDesc" style="display:none;margin-top:10px;font-size:11px;color:var(--muted);"></div>
+    <div class="reg" id="shReg">--</div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

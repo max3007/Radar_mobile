@@ -1,0 +1,20 @@
+{
+  "name": "radar-mobile",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Radar aerei in tempo reale per mobile: mappa Leaflet, dati ADS-B da airplanes.live",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5",
+    "vitest": "^3.1.4"
+  }
+}

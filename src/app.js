@@ -1,0 +1,999 @@
+// Logica applicativa del radar: mappa Leaflet, marker/scie, pannelli,
+// polling, bussola MIRA, ricerca, geolocalizzazione.
+// Portata quasi 1:1 dal prototipo a file singolo (vedi legacy/radarmobile.html);
+// le chiusure interne restano volutamente insieme perche condividono lo stato
+// (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
+
+import L from 'leaflet';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API } from './config.js';
+import { loadPrefs, savePrefs } from './prefs.js';
+import {
+  airlineName, toCallsign, fmtFlight, altColor, compass,
+  bearingFromCenter, elevationAngle, emergencyInfo, flightPhase
+} from './domain.js';
+
+var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
+var radiusNM = DEFAULT_RADIUS_NM;
+var filterAirline = "";
+var filterAirborne = false;
+
+export function initApp() {
+  if (typeof L === 'undefined') {
+    document.getElementById('hud').innerHTML = '<div style="padding:8px;font-size:12px;">Errore: Leaflet non caricato (serve connessione)</div>';
+    return;
+  }
+
+  var p = loadPrefs();
+  if (p) {
+    if (p.radiusNM >= 25 && p.radiusNM <= 250) radiusNM = p.radiusNM;
+    if (typeof p.filterAirline === 'string') filterAirline = p.filterAirline;
+    if (typeof p.filterAirborne === 'boolean') filterAirborne = p.filterAirborne;
+  }
+  document.getElementById('radiusSlider').value = radiusNM;
+  document.getElementById('radiusVal').textContent = radiusNM;
+  document.getElementById('airlineSearch').value = filterAirline;
+  document.getElementById('chkAirborne').checked = filterAirborne;
+
+  // Attribuzione obbligatoria per le tile OSM/CARTO, in forma discreta
+  var map = L.map('map', {
+    zoomControl: false,
+    attributionControl: true
+  }).setView(CENTER, 8);
+  map.attributionControl.setPrefix(false);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  }).addTo(map);
+
+  var markers = {};      // hex -> marker
+  var markerState = {};  // hex -> { track, color, sel } per evitare setIcon inutili
+  var trails = {};       // hex -> { pts, line, color }
+  var selected = null;
+  var lastAircraft = [];
+  var photoCache = {};
+  var rings = [];
+  var fetchSeq = 0;      // scarta risposte fuori ordine
+  var timer = null;
+  var searchMarker = null;  // marker per un volo cercato fuori dal raggio
+  var observerLabel = '';   // etichetta punto di osservazione nell'HUD
+  var tagMarker = null;     // etichetta ancorata che segue l'aereo selezionato
+  var selectedAc = null;    // dati dell'aereo selezionato
+
+  function clearTag() {
+    if (tagMarker) { map.removeLayer(tagMarker); tagMarker = null; }
+  }
+  function tagIcon(ac) {
+    // Numero volo commerciale se disponibile in cache rotte, altrimenti callsign
+    var cs = (ac.flight || '').trim();
+    var num = cs || ac.hex.toUpperCase();
+    var route = null;
+    if (cs && routeCache[cs]) {
+      var r = routeCache[cs];
+      var fnum = fmtFlight(r.flightIata);
+      if (fnum) num = fnum;
+      route = (r.orig.iata || r.orig.icao || '?') + ' \u2192 ' + (r.dest.iata || r.dest.icao || '?');
+    }
+    var alt = ac.alt_baro === 'ground' ? 'TERRA' : (ac.alt_baro != null ? ac.alt_baro + ' ft' : '--');
+    var spd = ac.gs != null ? Math.round(ac.gs) + ' kt' : '--';
+    var dir = ac.track != null ? Math.round(ac.track) + '\u00B0 ' + compass(ac.track) : '';
+    var comp = airlineName(ac.flight);
+    return L.divIcon({
+      className: '',
+      html: '<div class="tag-anchor">' +
+        '<div class="tag-line"></div>' +
+        '<div class="tag-box">' +
+          '<div class="l1">' + num + '</div>' +
+          '<div class="l3" style="color:var(--muted);">' + comp + '</div>' +
+          (route ? '<div class="l3">' + route + '</div>' : '') +
+          '<div class="l2">' + alt + ' \u00B7 ' + spd + '</div>' +
+          (dir ? '<div class="l2">' + dir + '</div>' : '') +
+        '</div></div>',
+      iconSize: [0, 0], iconAnchor: [0, 0]
+    });
+  }
+  function updateTag(ac) {
+    if (!ac || ac.lat == null) return;
+    if (!tagMarker) {
+      tagMarker = L.marker([ac.lat, ac.lon], { icon: tagIcon(ac), interactive: true, keyboard: false, zIndexOffset: 1000 }).addTo(map);
+      tagMarker.on('click', function (e) { L.DomEvent.stopPropagation(e); openFull(); });
+    } else {
+      tagMarker.setLatLng([ac.lat, ac.lon]);
+      tagMarker.setIcon(tagIcon(ac));
+    }
+  }
+  function clearSearchMarker() {
+    if (searchMarker) { map.removeLayer(searchMarker); searchMarker = null; }
+  }
+
+  // ---------- Bussola live: punta il telefono verso l'aereo selezionato ----------
+  var miraActive = false;
+  var miraHandler = null;
+  function miraTargetBearing() {
+    if (!selectedAc || selectedAc.lat == null) return null;
+    return bearingFromCenter(CENTER, selectedAc.lat, selectedAc.lon);
+  }
+  function updateMiraStatic() {
+    if (!selectedAc || selectedAc.lat == null) return;
+    var elev = elevationAngle(CENTER, selectedAc.lat, selectedAc.lon, selectedAc.alt_baro);
+    document.getElementById('miraElev').textContent = elev + '\u00B0';
+  }
+  // Smoothing circolare: media esponenziale su seno/coseno (gestisce il salto 359->0)
+  var smoothSin = null, smoothCos = null;
+  var lastShownDiff = null;
+  var SMOOTH = 0.15;      // 0..1: piu basso = piu stabile ma piu lento
+  var DEADZONE = 2.5;     // gradi: sotto questa variazione non muove nulla
+  function onOrientation(e) {
+    var heading = null;
+    if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
+    else if (e.alpha != null) heading = 360 - e.alpha; // Android: alpha antiorario da Nord
+    if (heading == null) return;
+    // Filtro passa-basso su componenti circolari
+    var rad = heading * Math.PI / 180;
+    if (smoothSin == null) { smoothSin = Math.sin(rad); smoothCos = Math.cos(rad); }
+    else {
+      smoothSin = smoothSin * (1 - SMOOTH) + Math.sin(rad) * SMOOTH;
+      smoothCos = smoothCos * (1 - SMOOTH) + Math.cos(rad) * SMOOTH;
+    }
+    var smoothed = (Math.atan2(smoothSin, smoothCos) * 180 / Math.PI + 360) % 360;
+
+    var target = miraTargetBearing();
+    if (target == null) return;
+    var diff = ((target - smoothed + 540) % 360) - 180; // -180..180
+
+    // Zona morta: ignora micro-variazioni
+    if (lastShownDiff != null && Math.abs(diff - lastShownDiff) < DEADZONE) return;
+    lastShownDiff = diff;
+
+    var tick = document.getElementById('miraTick');
+    var status = document.getElementById('miraStatus');
+    var locked = document.getElementById('miraLocked');
+    // La tacca scorre: centro = allineato. Scala: +-60 gradi visibili sulla barra
+    var pct = 50 + Math.max(-45, Math.min(45, diff / 60 * 45));
+    tick.style.left = pct + '%';
+    var ad = Math.abs(diff);
+    if (ad < 8) {
+      status.textContent = '\u2708 ALLINEATO \u2014 GUARDA L\u00C0!';
+      locked.style.display = 'block';
+    } else {
+      locked.style.display = 'none';
+      var offscale = ad > 60 ? ' (fuori scala)' : '';
+      status.textContent = (diff > 0 ? 'RUOTA A DESTRA ' : 'RUOTA A SINISTRA ') + Math.round(ad) + '\u00B0' + offscale;
+    }
+  }
+  function startMira() {
+    if (!selectedAc) return;
+    // Reset del filtro: riparte pulito
+    smoothSin = null; smoothCos = null; lastShownDiff = null;
+    var overlay = document.getElementById('miraOverlay');
+    var hint = document.getElementById('miraHint');
+    overlay.style.display = 'block';
+    updateMiraStatic();
+    document.getElementById('miraStatus').textContent = 'RUOTA IL TELEFONO\u2026';
+    function attach() {
+      miraActive = true;
+      miraHandler = onOrientation;
+      window.addEventListener('deviceorientationabsolute', miraHandler, true);
+      window.addEventListener('deviceorientation', miraHandler, true);
+      hint.textContent = 'Bussola imprecisa? Muovi il telefono a otto';
+    }
+    // iOS 13+: serve permesso esplicito
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission().then(function (resp) {
+        if (resp === 'granted') attach();
+        else hint.textContent = 'Permesso bussola negato';
+      }).catch(function () { hint.textContent = 'Bussola non disponibile'; });
+    } else if (window.DeviceOrientationEvent) {
+      attach();
+    } else {
+      hint.textContent = 'Bussola non supportata su questo dispositivo';
+    }
+  }
+  function stopMira() {
+    miraActive = false;
+    document.getElementById('miraOverlay').style.display = 'none';
+    if (miraHandler) {
+      window.removeEventListener('deviceorientationabsolute', miraHandler, true);
+      window.removeEventListener('deviceorientation', miraHandler, true);
+      miraHandler = null;
+    }
+  }
+
+  function drawRings() {
+    rings.forEach(function (r) { map.removeLayer(r); });
+    rings = [];
+    var step = radiusNM / 4;
+    for (var i = 1; i <= 4; i++) {
+      rings.push(L.circle(CENTER, {
+        radius: step * i * 1852, color: '#34e08a', weight: 1, fill: false,
+        opacity: 0.4, dashArray: '2,7', interactive: false
+      }).addTo(map));
+    }
+  }
+
+  var sweepEl = document.getElementById('sweep');
+  function positionSweep() {
+    var c = map.latLngToContainerPoint(CENTER);
+    var east = L.latLng(CENTER[0], CENTER[1] + (radiusNM * 1.852 / (111.32 * Math.cos(CENTER[0] * Math.PI / 180))));
+    var e = map.latLngToContainerPoint(east);
+    var d = Math.abs(e.x - c.x) * 2;
+    sweepEl.style.width = d + 'px';
+    sweepEl.style.height = d + 'px';
+    sweepEl.style.left = c.x + 'px';
+    sweepEl.style.top = c.y + 'px';
+  }
+  map.on('move zoom viewreset resize', positionSweep);
+
+  function planeIcon(track, color, isSel, emerg) {
+    var cls = 'plane-icon' + (isSel ? ' selected' : '') + (emerg ? ' emerg' : '');
+    var fill = emerg ? '#ff3b30' : color;
+    return L.divIcon({
+      className: '',
+      html: '<div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;">' +
+        '<div class="' + cls + '" style="transform: rotate(' + (track||0) + 'deg);">' +
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="' + fill + '">' +
+        '<path d="M12 2 L14 10 L22 13 L22 15 L14 13.5 L13.5 20 L16 21.5 L16 23 L12 22 L8 23 L8 21.5 L10.5 20 L10 13.5 L2 15 L2 13 L10 10 Z"/>' +
+        '</svg></div></div>',
+      iconSize: [40, 40], iconAnchor: [20, 20]
+    });
+  }
+
+  function passesFilters(ac) {
+    if (filterAirborne && ac.alt_baro === 'ground') return false;
+    if (filterAirline && airlineName(ac.flight) !== filterAirline) return false;
+    return true;
+  }
+
+  // ---------- Foto ----------
+  async function fetchPhotoFrom(url) {
+    var res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    if (data.photos && data.photos.length > 0) {
+      var p = data.photos[0];
+      return {
+        url: (p.thumbnail_large && p.thumbnail_large.src) || (p.thumbnail && p.thumbnail.src),
+        credit: p.photographer || ''
+      };
+    }
+    return null;
+  }
+  async function loadPhoto(hex, reg) {
+    var wrap = document.getElementById('photoWrap');
+    var note = document.getElementById('photoNote');
+    wrap.style.display = 'none';
+    note.textContent = '';
+    if (photoCache[hex] === null) { note.textContent = 'Nessuna foto in archivio per questo aereo'; return; }
+    if (photoCache[hex]) { showPhoto(photoCache[hex]); return; }
+    note.textContent = 'Cerco foto\u2026';
+    try {
+      var info = await fetchPhotoFrom(API.photoHex + hex.toUpperCase());
+      if (!info && reg) {
+        info = await fetchPhotoFrom(API.photoReg + encodeURIComponent(reg));
+      }
+      if (info && info.url) {
+        photoCache[hex] = info;
+        note.textContent = '';
+        showPhoto(info);
+      } else {
+        photoCache[hex] = null;
+        note.textContent = 'Nessuna foto in archivio per questo aereo';
+      }
+    } catch (e) {
+      note.textContent = 'Foto non raggiungibile (' + e.message + ')';
+    }
+  }
+  function showPhoto(info) {
+    if (!info.url) return;
+    document.getElementById('photo').src = info.url;
+    document.getElementById('photoCredit').textContent = '\u00A9 ' + info.credit + ' \u00B7 planespotters.net';
+    document.getElementById('photoWrap').style.display = 'block';
+  }
+
+  // ---------- Rotta del volo (adsbdb.com, gratuita senza chiave) ----------
+  var routeCache = {};   // callsign -> {orig, dest} | null (null = non trovata)
+  var routeLine = null;  // polilinea origine -> aereo -> destinazione
+  var currentRoute = null;
+
+  function clearRouteLine() {
+    if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+    currentRoute = null;
+  }
+  function drawRouteLine(ac) {
+    if (!currentRoute) return;
+    if (routeLine) map.removeLayer(routeLine);
+    routeLine = L.polyline([
+      [currentRoute.orig.lat, currentRoute.orig.lon],
+      [ac.lat, ac.lon],
+      [currentRoute.dest.lat, currentRoute.dest.lon]
+    ], { color: '#ffb454', weight: 1.5, opacity: 0.55, dashArray: '6,6', interactive: false }).addTo(map);
+  }
+  function showRoute(r, ac) {
+    document.getElementById('routeNote').textContent = '';
+    if (!r) {
+      document.getElementById('routeBox').style.display = 'none';
+      document.getElementById('routeNote').textContent = 'Rotta non disponibile per questo volo';
+      document.getElementById('miniOrig').textContent = '?';
+      document.getElementById('miniDest').textContent = '?';
+      clearRouteLine();
+      if (ac && selected === ac.hex && tagMarker) updateTag(ac);
+      return;
+    }
+    var cs = ac ? (ac.flight || '').trim() : '';
+    document.getElementById('rFlight').textContent = fmtFlight(r.flightIata) || fmtFlight(cs) || '--';
+    document.getElementById('rOrigCity').textContent = r.orig.city || r.orig.name || '--';
+    document.getElementById('rOrigIata').textContent = r.orig.iata || r.orig.icao || '';
+    document.getElementById('rDestCity').textContent = r.dest.city || r.dest.name || '--';
+    document.getElementById('rDestIata').textContent = r.dest.iata || r.dest.icao || '';
+    // Destinazione e partenza nella riga compatta
+    document.getElementById('miniOrig').textContent = r.orig.city || r.orig.iata || r.orig.icao || '?';
+    document.getElementById('miniDest').textContent = r.dest.city || r.dest.iata || r.dest.icao || '?';
+    // Numero volo commerciale (IATA) al posto del callsign
+    var miniF = document.getElementById('miniFlight');
+    var num = fmtFlight(r.flightIata);
+    if (num) { miniF.textContent = num; miniF.dataset.iata = '1'; }
+    document.getElementById('routeBox').style.display = 'block';
+    currentRoute = r;
+    if (ac && ac.lat != null) drawRouteLine(ac);
+    // Aggiorna l'etichetta ancorata ora che numero volo e rotta sono noti
+    if (ac && selected === ac.hex && tagMarker) updateTag(ac);
+  }
+  async function loadRoute(ac) {
+    var box = document.getElementById('routeBox');
+    var note = document.getElementById('routeNote');
+    box.style.display = 'none';
+    note.textContent = '';
+    clearRouteLine();
+    var cs = (ac.flight || '').trim();
+    if (!cs) { note.textContent = 'Rotta non disponibile (nessun callsign)'; return; }
+    // Callsign valido = 3 lettere compagnia + numero + eventuale suffisso di lettere
+    // (es. RYR1234, RYR78YR, EJU45AB). Ryanair/easyJet usano suffissi alfabetici legittimi.
+    // Scartiamo solo cio che NON inizia con 3 lettere + almeno una cifra.
+    if (!/^[A-Z]{3}[0-9]/.test(cs.toUpperCase())) {
+      note.textContent = 'Rotta non disponibile (callsign non standard)';
+      showRoute(null, ac);
+      return;
+    }
+    if (cs in routeCache) { showRoute(routeCache[cs], ac); return; }
+    note.textContent = 'Cerco rotta\u2026';
+    try {
+      var res = await fetch(API.routeCallsign + encodeURIComponent(cs));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      var fr = data && data.response && data.response.flightroute;
+      if (fr && fr.origin && fr.destination) {
+        var r = {
+          flightIata: fr.callsign_iata || null,
+          orig: { iata: fr.origin.iata_code, icao: fr.origin.icao_code, city: fr.origin.municipality,
+                  name: fr.origin.name, lat: fr.origin.latitude, lon: fr.origin.longitude },
+          dest: { iata: fr.destination.iata_code, icao: fr.destination.icao_code, city: fr.destination.municipality,
+                  name: fr.destination.name, lat: fr.destination.latitude, lon: fr.destination.longitude }
+        };
+        routeCache[cs] = r;
+        // Mostra solo se l'aereo e ancora selezionato
+        if (selected === ac.hex) showRoute(r, ac);
+      } else {
+        routeCache[cs] = null;
+        if (selected === ac.hex) showRoute(null, ac);
+      }
+    } catch (e) {
+      // Non mettere in cache gli errori di rete: si riprova alla prossima apertura
+      if (selected === ac.hex) note.textContent = 'Rotta non raggiungibile (' + e.message + ')';
+    }
+  }
+
+  // ---------- Pannelli ----------
+  function closeAll() {
+    document.getElementById('board').classList.remove('open');
+    document.getElementById('settings').classList.remove('open');
+    document.getElementById('searchPanel').classList.remove('open');
+    closeSheet();
+  }
+  function updateSelectedIcons(prevSel, newSel) {
+    // Aggiorna solo i marker coinvolti nel cambio selezione
+    [prevSel, newSel].forEach(function (id) {
+      if (id && markers[id] && markers[id]._ac) {
+        var ac = markers[id]._ac;
+        var isSel = (id === newSel);
+        var color = altColor(ac.alt_baro, isSel);
+        var emg = !!emergencyInfo(ac);
+        markers[id].setIcon(planeIcon(ac.track, color, isSel, emg));
+        markerState[id] = { track: ac.track || 0, color: color, sel: isSel, emg: emg };
+        if (trails[id] && trails[id].line) {
+          trails[id].line.setStyle({ color: isSel ? '#f2fff8' : trails[id].color });
+        }
+      }
+    });
+  }
+  function fillSheet(ac) {
+    document.getElementById('shAirline').textContent = airlineName(ac.flight).toUpperCase();
+    // Tipo aereo in evidenza sotto la compagnia: usa descrizione estesa se disponibile, altrimenti codice tipo
+    var modelEl = document.getElementById('shModel');
+    var model = ac.desc || ac.t || '';
+    modelEl.textContent = model || 'Tipo sconosciuto';
+    modelEl.style.display = model ? 'block' : 'none';
+    // Riga compatta: compagnia + dati che si aggiornano ad ogni refresh
+    document.getElementById('miniAirline').textContent = airlineName(ac.flight).toUpperCase();
+    // Ripiego numero volo = callsign, finche showRoute non fornisce il numero IATA
+    var miniF = document.getElementById('miniFlight');
+    if (!miniF.dataset.iata) miniF.textContent = (ac.flight || '').trim() || ac.hex.toUpperCase();
+    document.getElementById('miniAlt').textContent = ac.alt_baro === 'ground' ? 'A terra' : (ac.alt_baro != null ? ac.alt_baro + ' ft' : '--');
+    document.getElementById('miniSpd').textContent = ac.gs != null ? Math.round(ac.gs) + ' kt' : '--';
+    // Tipo aereo nella riga mini
+    document.getElementById('miniModel').textContent = ac.desc || ac.t || 'Tipo sconosciuto';
+    // Distanza e direzione da Anzio nella riga mini
+    if (ac.lat != null && ac.lon != null) {
+      var mkm = map.distance([ac.lat, ac.lon], CENTER) / 1000;
+      document.getElementById('miniDist').textContent = mkm.toFixed(0) + ' km ' + compass(bearingFromCenter(CENTER, ac.lat, ac.lon));
+    } else {
+      document.getElementById('miniDist').textContent = '--';
+    }
+    // Fase di volo nella riga mini
+    document.getElementById('miniPhase').textContent = flightPhase(ac) || '';
+    document.getElementById('shAlt').textContent = ac.alt_baro === 'ground' ? 'TERRA' : (ac.alt_baro != null ? ac.alt_baro + ' ft' : '--');
+    document.getElementById('shSpd').textContent = ac.gs != null ? Math.round(ac.gs) + ' kt' : '--';
+    document.getElementById('shTrk').textContent = ac.track != null ? Math.round(ac.track) + '\u00B0 ' + compass(ac.track) : '--';
+    // Variometro: salita/discesa in ft/min
+    var vr = ac.baro_rate != null ? ac.baro_rate : ac.geom_rate;
+    var vEl = document.getElementById('shVario');
+    if (vr == null || Math.abs(vr) < 64) { vEl.textContent = '\u2192 livellato'; vEl.style.color = ''; }
+    else if (vr > 0) { vEl.textContent = '\u2191 +' + vr + ' ft/m'; vEl.style.color = '#6fd3ff'; }
+    else { vEl.textContent = '\u2193 ' + vr + ' ft/m'; vEl.style.color = '#ffb454'; }
+    // Distanza e direzione da Anzio, sempre presenti e aggiornate
+    var distTxt = '';
+    if (ac.lat != null && ac.lon != null) {
+      var km = map.distance([ac.lat, ac.lon], CENTER) / 1000;
+      distTxt = 'DIST ' + km.toFixed(1) + ' km ' + compass(bearingFromCenter(CENTER, ac.lat, ac.lon)) + '  \u00B7  ';
+    }
+    var cs = (ac.flight || '').trim();
+    document.getElementById('shReg').textContent = distTxt +
+      (cs ? 'VOLO ' + cs + '  \u00B7  ' : '') + 'REG ' + (ac.r || '--') + '  \u00B7  HEX ' + ac.hex.toUpperCase();
+
+    // --- Emergenza ---
+    var emerg = emergencyInfo(ac);
+    var banner = document.getElementById('emergBanner');
+    if (emerg) {
+      banner.textContent = '\u26A0 ' + emerg + (ac.squawk ? ' \u00B7 SQUAWK ' + ac.squawk : '');
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
+
+    // --- Fase di volo (signature) con icona e barra quota ---
+    var phaseEl = document.getElementById('shPhase');
+    var phase = flightPhase(ac);
+    if (phase) {
+      document.getElementById('phaseTxt').textContent = phase;
+      // Icona secondo la fase
+      var pico = '\u2708';
+      if (phase.indexOf('SALITA') !== -1) pico = '\u2197';
+      else if (phase.indexOf('DISCESA') !== -1 || phase.indexOf('AVVICINAMENTO') !== -1 || phase.indexOf('ARRIVO') !== -1) pico = '\u2198';
+      else if (phase.indexOf('CROCIERA') !== -1) pico = '\u2708';
+      else if (phase.indexOf('TERRA') !== -1) pico = '\u25AC';
+      document.getElementById('phaseIco').textContent = pico;
+      // Barra quota: 0 a 40000 ft come riferimento crociera
+      var pct = 0;
+      if (typeof ac.alt_baro === 'number') pct = Math.max(0, Math.min(100, ac.alt_baro / 40000 * 100));
+      document.getElementById('altBar').style.width = pct + '%';
+      phaseEl.classList.add('show');
+    } else {
+      phaseEl.classList.remove('show');
+    }
+
+    // --- Griglia tecnica: Mach, assetto, vento, temperatura ---
+    var hasTech = (ac.mach != null || ac.roll != null || ac.ws != null || ac.oat != null);
+    document.getElementById('techGrid').style.display = hasTech ? 'grid' : 'none';
+    document.getElementById('shMach').textContent = ac.mach != null ? 'M ' + ac.mach.toFixed(2) : '--';
+    // Assetto: rollio -> virata sinistra/destra
+    var rEl = document.getElementById('shRoll');
+    if (ac.roll == null) { rEl.textContent = '--'; }
+    else if (ac.roll < -5) { rEl.textContent = '\u21B0 sx ' + Math.abs(Math.round(ac.roll)) + '\u00B0'; }
+    else if (ac.roll > 5) { rEl.textContent = '\u21B1 dx ' + Math.round(ac.roll) + '\u00B0'; }
+    else { rEl.textContent = 'dritto'; }
+    document.getElementById('shWind').textContent = (ac.ws != null && ac.wd != null)
+      ? Math.round(ac.ws) + ' kt ' + compass(ac.wd) : '--';
+    document.getElementById('shOat').textContent = ac.oat != null ? Math.round(ac.oat) + '\u00B0C' : '--';
+
+    // --- Operatore e categoria (il modello e gia in evidenza nell'header) ---
+    var descEl = document.getElementById('shDesc');
+    var bits = [];
+    if (ac.ownOp && ac.ownOp.toUpperCase() !== airlineName(ac.flight).toUpperCase()) bits.push('Operatore: ' + ac.ownOp);
+    if (ac.category) bits.push('Cat. ' + ac.category);
+    if (bits.length) { descEl.textContent = bits.join('  \u00B7  '); descEl.style.display = 'block'; }
+    else { descEl.style.display = 'none'; }
+
+    // Mantiene la linea di rotta agganciata alla posizione attuale dell'aereo
+    if (currentRoute && ac.lat != null) drawRouteLine(ac);
+  }
+  // Selezione = mostra etichetta ancorata sull'aereo, attenua gli altri
+  function openSheet(ac, skipPhoto) {
+    var prev = selected;
+    selected = ac.hex;
+    selectedAc = ac;
+    // Cambio aereo: azzera la rotta tracciata del precedente
+    if (prev !== ac.hex) { clearRouteLine(); currentRoute = null; }
+    document.getElementById('board').classList.remove('open');
+    document.getElementById('settings').classList.remove('open');
+    updateTag(ac);
+    // Carica la rotta subito (serve all'etichetta per partenza->destinazione)
+    var cs = (ac.flight || '').trim();
+    if (cs && !(cs in routeCache)) loadRoute(ac);
+    else if (cs && routeCache[cs]) showRoute(routeCache[cs], ac);
+    if (prev !== selected) updateSelectedIcons(prev, selected);
+    drawPlanes(lastAircraft); // riapplica attenuazione agli altri
+  }
+  // Espande alla scheda a tutto schermo
+  function openFull() {
+    if (!selectedAc) return;
+    var ac = selectedAc;
+    var mf = document.getElementById('miniFlight'); delete mf.dataset.iata;
+    document.getElementById('miniOrig').textContent = '\u2026';
+    document.getElementById('miniDest').textContent = '\u2026';
+    fillSheet(ac);
+    var s = document.getElementById('sheet');
+    s.classList.remove('mini');
+    s.classList.add('open', 'full');
+    loadPhoto(ac.hex, ac.r);
+    // Rotta: usa cache se presente, altrimenti caricala
+    var cs = (ac.flight || '').trim();
+    if (cs && routeCache[cs] !== undefined) showRoute(routeCache[cs], ac);
+    else loadRoute(ac);
+  }
+  // Chiude la full, torna all'etichetta ancorata
+  function closeFull() {
+    document.getElementById('sheet').classList.remove('open', 'full');
+    stopMira();
+  }
+  // Deseleziona tutto
+  function closeSheet() {
+    if (!selected) return;
+    var prev = selected;
+    selected = null;
+    selectedAc = null;
+    stopMira();
+    document.getElementById('sheet').classList.remove('open', 'full');
+    clearTag();
+    clearRouteLine();
+    clearSearchMarker();
+    updateSelectedIcons(prev, null);
+    drawPlanes(lastAircraft); // ripristina piena visibilita
+  }
+  map.on('click', closeAll);
+
+  // ---------- Classifica ----------
+  function renderBoard() {
+    var counts = {};
+    var filtered = lastAircraft.filter(passesFilters);
+    for (var i = 0; i < filtered.length; i++) {
+      var n = airlineName(filtered[i].flight);
+      counts[n] = (counts[n] || 0) + 1;
+    }
+    var list = Object.keys(counts).map(function (k) { return { name: k, n: counts[k] }; })
+      .sort(function (a, b) { return b.n - a.n; });
+    var max = list.length ? list[0].n : 1;
+    var html = '';
+    for (var j = 0; j < list.length; j++) {
+      html += '<div class="row"><div class="name">' + list[j].name + '</div>' +
+        '<div class="barWrap"><div class="bar" style="width:' + Math.round(list[j].n / max * 100) + '%"></div></div>' +
+        '<div class="n">' + list[j].n + '</div></div>';
+    }
+    document.getElementById('boardList').innerHTML = html || '<div class="row"><div class="name">Nessun contatto</div></div>';
+  }
+
+  // ---------- Tendina compagnie con ricerca ----------
+  var pendingAirline = filterAirline;
+  function airlinesPresent() {
+    var names = {};
+    for (var i = 0; i < lastAircraft.length; i++) names[airlineName(lastAircraft[i].flight)] = true;
+    return Object.keys(names).sort();
+  }
+  function renderAirlineList() {
+    var box = document.getElementById('airlineList');
+    var q = document.getElementById('airlineSearch').value.trim().toLowerCase();
+    var list = airlinesPresent().filter(function (n) {
+      return !q || n.toLowerCase().indexOf(q) !== -1;
+    });
+    var html = '<div class="opt" data-name="" style="padding:8px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line);">Tutte</div>';
+    for (var i = 0; i < list.length; i++) {
+      html += '<div class="opt" data-name="' + list[i].replace(/"/g,'&quot;') + '" style="padding:8px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line);">' + list[i] + '</div>';
+    }
+    box.innerHTML = html;
+    var opts = box.querySelectorAll('.opt');
+    for (var j = 0; j < opts.length; j++) {
+      opts[j].addEventListener('click', function () {
+        pendingAirline = this.getAttribute('data-name');
+        document.getElementById('airlineSearch').value = pendingAirline;
+        box.style.display = 'none';
+      });
+    }
+  }
+  var searchInput = document.getElementById('airlineSearch');
+  searchInput.addEventListener('focus', function () {
+    document.getElementById('airlineList').style.display = 'block';
+    renderAirlineList();
+  });
+  searchInput.addEventListener('input', function () {
+    pendingAirline = this.value.trim();
+    document.getElementById('airlineList').style.display = 'block';
+    renderAirlineList();
+  });
+
+  // ---------- Sopra di te ----------
+  function nearestAircraft() {
+    var best = null, bestD = Infinity;
+    var filtered = lastAircraft.filter(passesFilters);
+    for (var i = 0; i < filtered.length; i++) {
+      var ac = filtered[i];
+      if (ac.lat == null || ac.lon == null) continue;
+      var d = map.distance([ac.lat, ac.lon], CENTER);
+      if (d < bestD) { bestD = d; best = ac; }
+    }
+    return best;
+  }
+
+  // ---------- Disegno ----------
+  function drawPlanes(aircraft) {
+    var seen = {};
+    var maxSpd = 0, maxAlt = 0, count = 0;
+
+    for (var i = 0; i < aircraft.length; i++) {
+      var ac = aircraft[i];
+      if (ac.lat == null || ac.lon == null) continue;
+      if (!passesFilters(ac)) continue;
+      var id = ac.hex;
+      seen[id] = true;
+      count++;
+      if (ac.gs > maxSpd) maxSpd = ac.gs;
+      if (typeof ac.alt_baro === 'number' && ac.alt_baro > maxAlt) maxAlt = ac.alt_baro;
+
+      var isSel = (id === selected);
+      var color = altColor(ac.alt_baro, isSel);
+
+      // Scia: aggiorna i punti; ricrea la linea solo se serve
+      if (!trails[id]) trails[id] = { pts: [], line: null, color: color };
+      var t = trails[id];
+      var last = t.pts[t.pts.length - 1];
+      var moved = !last || last[0] !== ac.lat || last[1] !== ac.lon;
+      if (moved) {
+        t.pts.push([ac.lat, ac.lon]);
+        if (t.pts.length > 30) t.pts.shift();
+      }
+      if (t.pts.length > 1) {
+        var lineColor = isSel ? '#f2fff8' : color;
+        if (!t.line) {
+          t.line = L.polyline(t.pts, { color: lineColor, weight: 1.5, opacity: 0.45, interactive: false }).addTo(map);
+        } else {
+          if (moved) t.line.setLatLngs(t.pts);
+          if (t.color !== color || isSel) t.line.setStyle({ color: lineColor });
+        }
+        t.color = color;
+      }
+
+      // Marker: setIcon solo se rotta (>3 gradi), colore, selezione o emergenza cambiano
+      var st = markerState[id];
+      var trackNow = ac.track || 0;
+      var emg = !!emergencyInfo(ac);
+      var dim = (selected && !isSel); // attenua se c'e una selezione e non e questo
+      if (markers[id]) {
+        markers[id].setLatLng([ac.lat, ac.lon]);
+        markers[id]._ac = ac;
+        if (!st || Math.abs((st.track||0) - trackNow) > 3 || st.color !== color || st.sel !== isSel || st.emg !== emg) {
+          markers[id].setIcon(planeIcon(trackNow, color, isSel, emg));
+          markerState[id] = { track: trackNow, color: color, sel: isSel, emg: emg };
+        }
+      } else {
+        var m = L.marker([ac.lat, ac.lon], { icon: planeIcon(trackNow, color, isSel, emg) }).addTo(map);
+        m._ac = ac;
+        m.on('click', function (e) {
+          L.DomEvent.stopPropagation(e);
+          openSheet(this._ac);
+        });
+        markers[id] = m;
+        markerState[id] = { track: trackNow, color: color, sel: isSel, emg: emg };
+      }
+      // Attenuazione via classe sull'elemento del marker
+      var el = markers[id].getElement && markers[id].getElement();
+      if (el) { if (dim) el.classList.add('dimmed'); else el.classList.remove('dimmed'); }
+    }
+
+    for (var mid in markers) {
+      if (!seen[mid]) {
+        map.removeLayer(markers[mid]); delete markers[mid]; delete markerState[mid];
+        if (trails[mid]) { if (trails[mid].line) map.removeLayer(trails[mid].line); delete trails[mid]; }
+        if (selected === mid) closeSheet();
+      }
+    }
+
+    document.getElementById('stCount').textContent = count;
+    document.getElementById('stFast').textContent = maxSpd ? Math.round(maxSpd) : '--';
+    document.getElementById('stHigh').textContent = maxAlt ? (maxAlt >= 1000 ? Math.round(maxAlt/1000) + 'k' : maxAlt) : '--';
+  }
+
+  function updateHudFilters() {
+    var parts = [radiusNM + ' NM'];
+    parts.push(filterAirline ? filterAirline.toUpperCase() : 'TUTTE');
+    if (filterAirborne) parts.push('IN VOLO');
+    document.getElementById('hudFilters').innerHTML =
+      parts.join(' \u00B7 ') + (observerLabel ? ' \u00B7 <span style="color:var(--phosphor)">\u25C9 ' + observerLabel + '</span>' : '');
+  }
+
+  // ---------- Rete ----------
+  var errBar = document.getElementById('errBar');
+  async function fetchPlanes() {
+    var seq = ++fetchSeq;
+    try {
+      var res = await fetch(API.planesPoint + CENTER[0] + '/' + CENTER[1] + '/' + radiusNM);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      if (seq !== fetchSeq) return; // risposta superata da una piu recente: scarta
+      lastAircraft = data.ac || [];
+      errBar.style.display = 'none';
+      drawPlanes(lastAircraft);
+      renderBoard();
+      if (selected) {
+        var found = false;
+        for (var i = 0; i < lastAircraft.length; i++) {
+          if (lastAircraft[i].hex === selected) {
+            selectedAc = lastAircraft[i];
+            updateTag(lastAircraft[i]); // etichetta ancorata segue l'aereo
+            if (miraActive) updateMiraStatic(); // aggiorna direzione/elevazione live
+            // Aggiorna la scheda full solo se e aperta
+            if (document.getElementById('sheet').classList.contains('full')) fillSheet(lastAircraft[i]);
+            found = true; break;
+          }
+        }
+        if (!found && searchMarker && searchMarker._ac && searchMarker._ac.hex === selected) {
+          found = true;
+        }
+        if (!found) closeSheet();
+      }
+    } catch (e) {
+      if (seq !== fetchSeq) return;
+      errBar.style.display = 'block';
+    }
+  }
+
+  // Pausa in background per risparmiare batteria e richieste
+  function startPolling() {
+    if (timer) return;
+    fetchPlanes();
+    timer = setInterval(fetchPlanes, POLL_INTERVAL_MS);
+  }
+  function stopPolling() {
+    if (timer) { clearInterval(timer); timer = null; }
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      stopPolling();
+      document.getElementById('hudDot').style.animationPlayState = 'paused';
+    } else {
+      document.getElementById('hudDot').style.animationPlayState = '';
+      startPolling();
+    }
+  });
+
+  // ---------- Eventi UI ----------
+  document.getElementById('btnCenter').addEventListener('click', function () { map.setView(CENTER, 8); });
+  document.getElementById('btnBoard').addEventListener('click', function () {
+    var wasOpen = document.getElementById('board').classList.contains('open');
+    closeAll();
+    if (!wasOpen) document.getElementById('board').classList.add('open');
+  });
+  document.getElementById('btnSettings').addEventListener('click', function () {
+    var wasOpen = document.getElementById('settings').classList.contains('open');
+    closeAll();
+    if (!wasOpen) document.getElementById('settings').classList.add('open');
+  });
+  document.getElementById('btnAbove').addEventListener('click', function () {
+    var ac = nearestAircraft();
+    if (!ac) return;
+    map.setView([ac.lat, ac.lon], 10, { animate: true });
+    openSheet(ac);
+  });
+
+  // MIRA: bussola live sulla mappa verso l'aereo selezionato
+  document.getElementById('btnMira').addEventListener('click', function () {
+    if (miraActive) { stopMira(); return; } // secondo tap: spegne
+    if (!selectedAc) {
+      // Nessun aereo selezionato: usa il piu vicino
+      var ac = nearestAircraft();
+      if (!ac) return;
+      openSheet(ac); // selezione con etichetta ancorata
+    }
+    closeFull(); // la bussola vive sulla mappa, non nella scheda
+    startMira();
+  });
+  // Tap sull'overlay bussola: chiude
+  document.getElementById('miraOverlay').addEventListener('click', stopMira);
+
+  // ---------- Ricerca live tra gli aerei nel raggio ----------
+  function pickAndClose(ac) {
+    document.getElementById('searchPanel').classList.remove('open');
+    map.setView([ac.lat, ac.lon], 9, { animate: true });
+    openSheet(ac);
+  }
+  function renderSearchResults() {
+    var q = document.getElementById('flightSearch').value.trim().toUpperCase();
+    var box = document.getElementById('searchResults');
+    if (!q) { box.innerHTML = ''; return; }
+    var hits = [];
+    for (var i = 0; i < lastAircraft.length; i++) {
+      var ac = lastAircraft[i];
+      if (ac.lat == null) continue;
+      var cs = (ac.flight || '').trim().toUpperCase();
+      var hay = [cs, toCallsign(q) === cs ? q : '', airlineName(ac.flight).toUpperCase(),
+                 (ac.r || '').toUpperCase(), (ac.t || '').toUpperCase(), (ac.desc || '').toUpperCase()].join(' ');
+      if (hay.indexOf(q) !== -1 || cs === toCallsign(q)) hits.push(ac);
+      if (hits.length >= 8) break;
+    }
+    var html = '';
+    for (var j = 0; j < hits.length; j++) {
+      var a = hits[j];
+      var km = map.distance([a.lat, a.lon], CENTER) / 1000;
+      var alt = a.alt_baro === 'ground' ? 'a terra' : (a.alt_baro != null ? a.alt_baro + ' ft' : '');
+      html += '<div class="sr" data-hex="' + a.hex + '">' +
+        '<div class="f">' + ((a.flight || '').trim() || a.hex.toUpperCase()) + '</div>' +
+        '<div class="d">' + airlineName(a.flight) + '<small>' + (a.t || '') + ' \u00B7 ' + alt + '</small></div>' +
+        '<div class="km">' + km.toFixed(0) + ' km</div></div>';
+    }
+    box.innerHTML = html || '<div style="font-size:11px;color:var(--muted);padding:6px 0;">Nessun aereo nel raggio. Prova "CERCA NEL MONDO".</div>';
+    var rows = box.querySelectorAll('.sr');
+    for (var k = 0; k < rows.length; k++) {
+      rows[k].addEventListener('click', function () {
+        var hex = this.getAttribute('data-hex');
+        for (var m = 0; m < lastAircraft.length; m++) {
+          if (lastAircraft[m].hex === hex) { pickAndClose(lastAircraft[m]); return; }
+        }
+      });
+    }
+  }
+
+  // ---------- Chip rapidi ----------
+  function quickPick(kind) {
+    var pool = lastAircraft.filter(function (a) { return a.lat != null && passesFilters(a); });
+    if (!pool.length) return;
+    var best = null;
+    function by(fn, cmp) {
+      var b = null, bv = null;
+      for (var i = 0; i < pool.length; i++) {
+        var v = fn(pool[i]);
+        if (v == null) continue;
+        if (b === null || cmp(v, bv)) { b = pool[i]; bv = v; }
+      }
+      return b;
+    }
+    if (kind === 'vicino') best = by(function (a) { return map.distance([a.lat, a.lon], CENTER); }, function (x, y) { return x < y; });
+    else if (kind === 'alto') best = by(function (a) { return typeof a.alt_baro === 'number' ? a.alt_baro : null; }, function (x, y) { return x > y; });
+    else if (kind === 'veloce') best = by(function (a) { return a.gs; }, function (x, y) { return x > y; });
+    else if (kind === 'atterraggio') best = by(function (a) {
+      var vr = a.baro_rate != null ? a.baro_rate : a.geom_rate;
+      return (vr != null && vr < -300 && typeof a.alt_baro === 'number' && a.alt_baro < 12000) ? a.alt_baro : null;
+    }, function (x, y) { return x < y; });
+    else if (kind === 'decollo') best = by(function (a) {
+      var vr = a.baro_rate != null ? a.baro_rate : a.geom_rate;
+      return (vr != null && vr > 500 && typeof a.alt_baro === 'number' && a.alt_baro < 15000) ? a.alt_baro : null;
+    }, function (x, y) { return x < y; });
+    if (best) pickAndClose(best);
+    else document.getElementById('searchNote').textContent = 'Nessun aereo corrisponde ora';
+  }
+  var chips = document.querySelectorAll('#quickChips .chip');
+  for (var ci = 0; ci < chips.length; ci++) {
+    chips[ci].addEventListener('click', function () { quickPick(this.getAttribute('data-q')); });
+  }
+
+  // ---------- Ricerca per numero di volo (globale, anche fuori raggio) ----------
+  async function searchFlight() {
+    var raw = document.getElementById('flightSearch').value;
+    var note = document.getElementById('searchNote');
+    if (!raw.trim()) { note.textContent = 'Digita un numero di volo (es. AZ610)'; return; }
+    var cs = toCallsign(raw);
+    note.textContent = 'Cerco ' + cs + ' nel mondo\u2026';
+    try {
+      var res = await fetch(API.planesCallsign + encodeURIComponent(cs));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      var list = (data.ac || []).filter(function (a) { return a.lat != null && a.lon != null; });
+      if (!list.length) {
+        note.textContent = 'Volo ' + cs + ' non in volo o senza posizione';
+        clearSearchMarker();
+        return;
+      }
+      var ac = list[0];
+      note.textContent = '';
+      clearSearchMarker();
+      if (!markers[ac.hex]) {
+        searchMarker = L.marker([ac.lat, ac.lon], {
+          icon: planeIcon(ac.track, '#ffb454', true)
+        }).addTo(map);
+        searchMarker._ac = ac;
+        searchMarker.on('click', function (e) { L.DomEvent.stopPropagation(e); openSheet(this._ac); });
+      }
+      document.getElementById('searchPanel').classList.remove('open');
+      map.setView([ac.lat, ac.lon], 8, { animate: true });
+      openSheet(ac);
+      openFull();
+    } catch (e) {
+      note.textContent = 'Errore ricerca (' + e.message + ')';
+      clearSearchMarker();
+    }
+  }
+  // Chiudi la scheda full: torna all'etichetta ancorata
+  document.getElementById('closeFull').addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeFull();
+  });
+
+  // Pannello ricerca: apertura da FAB, ricerca live mentre digiti
+  document.getElementById('btnSearch').addEventListener('click', function () {
+    var p = document.getElementById('searchPanel');
+    var wasOpen = p.classList.contains('open');
+    closeAll();
+    if (!wasOpen) {
+      p.classList.add('open');
+      document.getElementById('searchNote').textContent = '';
+      renderSearchResults();
+      setTimeout(function () { document.getElementById('flightSearch').focus(); }, 250);
+    }
+  });
+  document.getElementById('flightSearchBtn').addEventListener('click', searchFlight);
+  document.getElementById('flightSearch').addEventListener('input', renderSearchResults);
+  document.getElementById('flightSearch').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') searchFlight();
+  });
+
+  document.getElementById('radiusSlider').addEventListener('input', function () {
+    document.getElementById('radiusVal').textContent = this.value;
+  });
+  document.getElementById('applyBtn').addEventListener('click', function () {
+    var newRadius = parseInt(document.getElementById('radiusSlider').value);
+    var radiusChanged = (newRadius !== radiusNM);
+    radiusNM = newRadius;
+    filterAirline = pendingAirline;
+    filterAirborne = document.getElementById('chkAirborne').checked;
+    savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne });
+    updateHudFilters();
+    document.getElementById('airlineList').style.display = 'none';
+    document.getElementById('settings').classList.remove('open');
+    if (radiusChanged) {
+      drawRings();
+      positionSweep();
+      // Ricentra solo se il raggio e cambiato, per non perdere la vista corrente
+      map.setView(CENTER, radiusNM > 180 ? 7 : radiusNM > 90 ? 8 : radiusNM > 40 ? 9 : 10);
+    }
+    fetchPlanes();
+  });
+
+  // ---------- Riapplica tutto quando cambia il centro ----------
+  function applyCenter(recenter) {
+    drawRings();
+    positionSweep();
+    if (recenter) map.setView(CENTER, radiusNM > 180 ? 7 : radiusNM > 90 ? 8 : radiusNM > 40 ? 9 : 10);
+    fetchPlanes();
+  }
+
+  // ---------- Avvio ----------
+  drawRings();
+  positionSweep();
+  updateHudFilters();
+  startPolling();
+
+  // Geolocalizzazione: il centro radar segue la posizione dell'utente
+  var isSecure = (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+  if (navigator.geolocation && isSecure) {
+    observerLabel = 'rilevo posizione\u2026'; updateHudFilters();
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        CENTER = [pos.coords.latitude, pos.coords.longitude];
+        observerLabel = 'la tua posizione'; updateHudFilters();
+        applyCenter(true);
+      },
+      function (err) {
+        // Permesso negato o non disponibile: resta su Anzio
+        observerLabel = 'Anzio (GPS non disp.)'; updateHudFilters();
+        console.warn('Geolocalizzazione non disponibile:', err && err.message);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  } else {
+    observerLabel = isSecure ? 'Anzio' : 'Anzio (serve HTTPS)'; updateHudFilters();
+  }
+}
