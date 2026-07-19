@@ -222,3 +222,14 @@
     }
     .fab:active { transform: scale(0.94); }
     .fab.small { font-size: 9px; letter-spacing: 0.5px; font-weight: 700; text-align: center; line-height: 1.2; }
+
+    /* Finestra SOPRA DI TE: conferma quando l'aereo piu vicino e basso sull'orizzonte */
+    #aboveDialog {
+      position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%);
+      z-index: 1310; width: min(300px, 84vw);
+      background: var(--panel); border: 1px solid var(--phosphor-dim); border-radius: 12px;
+      padding: 14px 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.6); text-align: center;
+    }
+    #aboveDialog #aboveTitle { font-size: 12px; font-weight: 700; letter-spacing: 2px; color: var(--amber); }
+    #aboveDialog #aboveInfo { font-size: 11px; color: var(--text); margin-top: 8px; line-height: 1.5; }
+    #aboveDialog .aboveBtns { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }

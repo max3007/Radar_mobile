@@ -406,6 +406,7 @@ export function initApp() {
     document.getElementById('board').classList.remove('open');
     document.getElementById('settings').classList.remove('open');
     document.getElementById('searchPanel').classList.remove('open');
+    hideAboveDialog();
     closeSheet();
   }
   function updateSelectedIcons(prevSel, newSel) {
@@ -803,12 +804,47 @@ export function initApp() {
     closeAll();
     if (!wasOpen) document.getElementById('settings').classList.add('open');
   });
-  document.getElementById('btnAbove').addEventListener('click', function () {
-    var ac = nearestAircraft();
-    if (!ac) return;
+  // SOPRA DI TE: se l'aereo piu vicino e basso sull'orizzonte non e davvero
+  // "sopra di te" (e probabilmente non visibile a occhio): chiedi conferma.
+  var ABOVE_MIN_ELEV = 15; // gradi di elevazione minima per considerarlo visibile
+  var aboveCandidate = null;
+  function showAbove(ac) {
     map.setView([ac.lat, ac.lon], 10, { animate: true });
     openSheet(ac);
+  }
+  function hideAboveDialog() {
+    document.getElementById('aboveDialog').style.display = 'none';
+    aboveCandidate = null;
+  }
+  document.getElementById('btnAbove').addEventListener('click', function () {
+    var ac = nearestAircraft();
+    var dlg = document.getElementById('aboveDialog');
+    if (!ac) {
+      document.getElementById('aboveTitle').textContent = 'NESSUN CONTATTO NEL RAGGIO';
+      document.getElementById('aboveInfo').textContent = 'Riprova tra qualche secondo';
+      document.getElementById('aboveGo').style.display = 'none';
+      dlg.style.display = 'block';
+      return;
+    }
+    var elev = elevationAngle(CENTER, ac.lat, ac.lon, ac.alt_baro);
+    if (elev >= ABOVE_MIN_ELEV) { hideAboveDialog(); showAbove(ac); return; }
+    var km = map.distance([ac.lat, ac.lon], CENTER) / 1000;
+    var name = (ac.flight || '').trim() || ac.hex.toUpperCase();
+    document.getElementById('aboveTitle').textContent = 'NESSUN AEREO SOPRA DI TE';
+    document.getElementById('aboveInfo').textContent = 'Il più vicino: ' + name +
+      ' (' + airlineName(ac.flight) + ') · ' + km.toFixed(0) + ' km ' +
+      compass(bearingFromCenter(CENTER, ac.lat, ac.lon)) +
+      ' · elevazione ' + elev + '°';
+    document.getElementById('aboveGo').style.display = '';
+    aboveCandidate = ac;
+    dlg.style.display = 'block';
   });
+  document.getElementById('aboveGo').addEventListener('click', function () {
+    var ac = aboveCandidate;
+    hideAboveDialog();
+    if (ac) showAbove(ac);
+  });
+  document.getElementById('aboveCancel').addEventListener('click', hideAboveDialog);
 
   // MIRA: bussola live sulla mappa verso l'aereo selezionato
   document.getElementById('btnMira').addEventListener('click', function () {
