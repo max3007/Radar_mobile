@@ -5,7 +5,7 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
-import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API } from './config.js';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE } from './config.js';
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
@@ -17,6 +17,7 @@ var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
 var radiusNM = DEFAULT_RADIUS_NM;
 var filterAirline = "";
 var filterAirborne = false;
+var mapStyle = DEFAULT_MAP_STYLE;
 
 export function initApp() {
   if (typeof L === 'undefined') {
@@ -29,22 +30,44 @@ export function initApp() {
     if (p.radiusNM >= 25 && p.radiusNM <= 250) radiusNM = p.radiusNM;
     if (typeof p.filterAirline === 'string') filterAirline = p.filterAirline;
     if (typeof p.filterAirborne === 'boolean') filterAirborne = p.filterAirborne;
+    if (TILE_STYLES[p.mapStyle]) mapStyle = p.mapStyle;
   }
   document.getElementById('radiusSlider').value = radiusNM;
   document.getElementById('radiusVal').textContent = radiusNM;
   document.getElementById('airlineSearch').value = filterAirline;
   document.getElementById('chkAirborne').checked = filterAirborne;
 
-  // Attribuzione obbligatoria per le tile OSM/CARTO, in forma discreta
+  // Attribuzione obbligatoria per le tile, in forma discreta
   var map = L.map('map', {
     zoomControl: false,
     attributionControl: true
   }).setView(CENTER, 8);
   map.attributionControl.setPrefix(false);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-  }).addTo(map);
+
+  // Basemap selezionabile dalle impostazioni (persistente nelle preferenze)
+  var tileLayer = null;
+  function setMapStyle(style, save) {
+    if (!TILE_STYLES[style]) return;
+    mapStyle = style;
+    var s = TILE_STYLES[style];
+    if (tileLayer) map.removeLayer(tileLayer);
+    tileLayer = L.tileLayer(s.url, s.options).addTo(map);
+    // Il filtro di schiarimento CSS vale solo per lo stile radar scuro
+    document.getElementById('map').classList.toggle('map-dark', !!s.dark);
+    // Evidenzia il chip attivo
+    var chips = document.querySelectorAll('#mapStyleChips .chip');
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].classList.toggle('active', chips[i].getAttribute('data-style') === style);
+    }
+    if (save) savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne, mapStyle: mapStyle });
+  }
+  setMapStyle(mapStyle, false);
+  var styleChips = document.querySelectorAll('#mapStyleChips .chip');
+  for (var sc = 0; sc < styleChips.length; sc++) {
+    styleChips[sc].addEventListener('click', function () {
+      setMapStyle(this.getAttribute('data-style'), true);
+    });
+  }
 
   var markers = {};      // hex -> marker
   var markerState = {};  // hex -> { track, color, sel } per evitare setIcon inutili
@@ -609,7 +632,7 @@ export function initApp() {
   function applyAirlineFilter(name) {
     filterAirline = name;
     document.getElementById('airlineSearch').value = name;
-    savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne });
+    savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne, mapStyle: mapStyle });
     updateHudFilters();
     drawPlanes(lastAircraft);
     renderBoard();
@@ -1010,7 +1033,7 @@ export function initApp() {
     var radiusChanged = (newRadius !== radiusNM);
     radiusNM = newRadius;
     filterAirborne = document.getElementById('chkAirborne').checked;
-    savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne });
+    savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne, mapStyle: mapStyle });
     updateHudFilters();
     document.getElementById('settings').classList.remove('open');
     if (radiusChanged) {

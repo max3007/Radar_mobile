@@ -52,7 +52,8 @@
 
     #map { position: fixed; inset: 0; z-index: 1; background: #2a3138; }
     .leaflet-container { background: var(--bg); font-family: var(--mono); }
-    .leaflet-tile { filter: brightness(2.4) contrast(1.05) saturate(0.9); }
+    /* Schiarimento solo per lo stile "radar scuro" (classe sul contenitore #map) */
+    .map-dark .leaflet-tile { filter: brightness(2.4) contrast(1.05) saturate(0.9); }
     .leaflet-control-attribution {
       background: rgba(6,10,14,0.7) !important; color: var(--muted) !important;
       font-size: 8px !important; font-family: var(--mono) !important;
@@ -233,3 +234,6 @@
     #aboveDialog #aboveTitle { font-size: 12px; font-weight: 700; letter-spacing: 2px; color: var(--amber); }
     #aboveDialog #aboveInfo { font-size: 11px; color: var(--text); margin-top: 8px; line-height: 1.5; }
     #aboveDialog .aboveBtns { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+
+    /* Chip attivo (selettore stile mappa) */
+    .chip.active { background: rgba(52,224,138,0.3); border-color: var(--phosphor); color: var(--white); }
