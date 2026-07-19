@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
   bearingBetween, bearingFromCenter, elevationAngle, destPoint,
-  emergencyInfo, flightPhase
+  emergencyInfo, flightPhase, routeConsistent
 } from '../src/domain.js';
 
 const ANZIO = [41.4479, 12.6285];
@@ -126,6 +126,41 @@ describe('destPoint', () => {
     const [lat, lon] = destPoint(41, 12, 0, 111320); // ~1 grado
     expect(lat).toBeCloseTo(42, 1);
     expect(lon).toBeCloseTo(12, 3);
+  });
+});
+
+describe('routeConsistent', () => {
+  const FCO = { lat: 41.8, lon: 12.25 };   // Roma Fiumicino
+  const JFK = { lat: 40.64, lon: -73.78 }; // New York
+  const YYZ = { lat: 43.68, lon: -79.63 }; // Toronto
+  const CPH = { lat: 55.62, lon: 12.66 };  // Copenaghen
+
+  it('aereo nel corridoio, prua verso destinazione -> plausibile', () => {
+    // poco a ovest di Roma, prua ovest, rotta Roma -> New York
+    const ac = { lat: 41.9, lon: 10.0, track: 285 };
+    expect(routeConsistent(ac, { orig: FCO, dest: JFK })).toBe(true);
+  });
+  it('aereo lontanissimo dal corridoio -> scartata (caso AC882 sopra Roma)', () => {
+    // Toronto -> Copenaghen passa sopra la Groenlandia, non sopra Roma
+    const ac = { lat: 41.4, lon: 12.5, track: 125 };
+    expect(routeConsistent(ac, { orig: YYZ, dest: CPH })).toBe(false);
+  });
+  it('aereo nel corridoio ma prua opposta (tratta di ritorno) -> scartata', () => {
+    const ac = { lat: 41.9, lon: 10.0, track: 100 }; // punta verso Roma, non verso New York
+    expect(routeConsistent(ac, { orig: FCO, dest: JFK })).toBe(false);
+  });
+  it('senza coordinate aeroporti -> non giudicabile, plausibile', () => {
+    const ac = { lat: 41.4, lon: 12.5, track: 125 };
+    expect(routeConsistent(ac, { orig: { iata: 'YYZ' }, dest: { iata: 'CPH' } })).toBe(true);
+  });
+  it('senza posizione aereo -> non giudicabile, plausibile', () => {
+    expect(routeConsistent({ track: 125 }, { orig: YYZ, dest: CPH })).toBe(true);
+  });
+  it('senza prua vale solo il controllo geometrico', () => {
+    const inCorridor = { lat: 41.9, lon: 10.0 };
+    expect(routeConsistent(inCorridor, { orig: FCO, dest: JFK })).toBe(true);
+    const offCorridor = { lat: 41.4, lon: 12.5 };
+    expect(routeConsistent(offCorridor, { orig: YYZ, dest: CPH })).toBe(false);
   });
 });
 

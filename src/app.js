@@ -9,7 +9,8 @@ import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API } from './conf
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
-  bearingFromCenter, elevationAngle, emergencyInfo, flightPhase
+  bearingFromCenter, elevationAngle, emergencyInfo, flightPhase,
+  routeConsistent
 } from './domain.js';
 
 var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
@@ -71,7 +72,10 @@ export function initApp() {
       var r = routeCache[cs];
       var fnum = fmtFlight(r.flightIata);
       if (fnum) num = fnum;
-      route = (r.orig.iata || r.orig.icao || '?') + ' \u2192 ' + (r.dest.iata || r.dest.icao || '?');
+      // Mostra la rotta solo se coerente con posizione e prua reali
+      if (routeConsistent(ac, r)) {
+        route = (r.orig.iata || r.orig.icao || '?') + ' \u2192 ' + (r.dest.iata || r.dest.icao || '?');
+      }
     }
     var alt = ac.alt_baro === 'ground' ? 'TERRA' : (ac.alt_baro != null ? ac.alt_baro + ' ft' : '--');
     var spd = ac.gs != null ? Math.round(ac.gs) + ' kt' : '--';
@@ -319,6 +323,22 @@ export function initApp() {
       return;
     }
     var cs = ac ? (ac.flight || '').trim() : '';
+    // Rotta d'archivio incoerente con posizione/prua reali: nascosta con nota.
+    // Il numero di volo IATA resta valido (deriva dal callsign, non dall'archivio).
+    if (ac && !routeConsistent(ac, r)) {
+      var lbl = (r.orig.iata || r.orig.icao || '?') + ' → ' + (r.dest.iata || r.dest.icao || '?');
+      document.getElementById('routeBox').style.display = 'none';
+      document.getElementById('routeNote').textContent =
+        'Rotta in archivio (' + lbl + ') non coerente con la posizione: probabilmente non aggiornata';
+      document.getElementById('miniOrig').textContent = '?';
+      document.getElementById('miniDest').textContent = '?';
+      var mfi = document.getElementById('miniFlight');
+      var numi = fmtFlight(r.flightIata);
+      if (numi) { mfi.textContent = numi; mfi.dataset.iata = '1'; }
+      clearRouteLine();
+      if (selected === ac.hex && tagMarker) updateTag(ac);
+      return;
+    }
     document.getElementById('rFlight').textContent = fmtFlight(r.flightIata) || fmtFlight(cs) || '--';
     document.getElementById('rOrigCity').textContent = r.orig.city || r.orig.name || '--';
     document.getElementById('rOrigIata').textContent = r.orig.iata || r.orig.icao || '';

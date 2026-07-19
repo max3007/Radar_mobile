@@ -84,6 +84,49 @@ export function destPoint(lat, lon, brg, distM) {
   return [la2 * 180 / Math.PI, lo2 * 180 / Math.PI];
 }
 
+// Verifica di plausibilita della rotta d'archivio (adsbdb) rispetto alla
+// posizione e alla prua reali dell'aereo. Il database delle rotte per
+// callsign e statico e a volte stantio: se l'aereo e lontano dal corridoio
+// origine->destinazione, o vola nella direzione opposta, la rotta in
+// archivio non e quella del volo in corso e va nascosta.
+export function routeConsistent(ac, route) {
+  var o = route && route.orig, d = route && route.dest;
+  // Senza coordinate (rotta o aereo) non si puo giudicare: non bloccare
+  if (!o || !d || o.lat == null || o.lon == null || d.lat == null || d.lon == null) return true;
+  if (ac.lat == null || ac.lon == null) return true;
+  var R = 6371; // km
+  function rad(x) { return x * Math.PI / 180; }
+  function angDist(lat1, lon1, lat2, lon2) {
+    var dLat = rad(lat2 - lat1), dLon = rad(lon2 - lon1);
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  var total = angDist(o.lat, o.lon, d.lat, d.lon);
+  if (total < 1e-6) return true;
+  var d13 = angDist(o.lat, o.lon, ac.lat, ac.lon);
+  var th13 = rad(bearingBetween(o.lat, o.lon, ac.lat, ac.lon));
+  var th12 = rad(bearingBetween(o.lat, o.lon, d.lat, d.lon));
+  // Distanza dal corridoio (cross-track sulla great circle origine->destinazione)
+  var dxt = Math.asin(Math.max(-1, Math.min(1, Math.sin(d13) * Math.sin(th13 - th12))));
+  var xtKm = Math.abs(dxt) * R;
+  var totKm = total * R;
+  if (xtKm > Math.max(200, totKm * 0.10)) return false;
+  // Posizione lungo la tratta: prima dell'origine o oltre la destinazione = incoerente
+  var dat = Math.acos(Math.max(-1, Math.min(1, Math.cos(d13) / Math.cos(dxt))));
+  var behind = Math.cos(th13 - th12) < 0;
+  var fracKm = (behind ? -1 : 1) * dat * R;
+  if (fracKm < -Math.max(200, totKm * 0.05) || fracKm > totKm + Math.max(200, totKm * 0.05)) return false;
+  // Direzione: in crociera la prua deve puntare grosso modo verso la destinazione
+  // (margine ampio, 120 gradi, per deviazioni meteo/aerovie e holding)
+  if (ac.track != null) {
+    var toDest = bearingBetween(ac.lat, ac.lon, d.lat, d.lon);
+    var diff = ((toDest - ac.track + 540) % 360) - 180;
+    if (Math.abs(diff) > 120) return false;
+  }
+  return true;
+}
+
 // Stato di emergenza: da campo 'emergency' e da squawk speciali
 export function emergencyInfo(ac) {
   var sq = ac.squawk;
