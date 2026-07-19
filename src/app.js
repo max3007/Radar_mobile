@@ -12,6 +12,7 @@ import {
   bearingFromCenter, elevationAngle, emergencyInfo, flightPhase,
   routeConsistent
 } from './domain.js';
+import AIRPORTS from './data/airports.json';
 
 var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
 var radiusNM = DEFAULT_RADIUS_NM;
@@ -235,7 +236,44 @@ export function initApp() {
         opacity: 0.4, dashArray: '2,7', interactive: false
       }).addTo(map));
     }
+    drawAirports(); // gli aeroporti seguono centro e raggio correnti
   }
+
+  // ---------- Aeroporti nel raggio ----------
+  var airportMarkers = [];
+  function airportIcon(a) {
+    return L.divIcon({
+      className: '',
+      html: '<div class="airport-marker"><span class="airport-dot"></span>' +
+        '<span class="airport-code">' + (a.iata || a.icao) + '</span></div>',
+      iconSize: [0, 0], iconAnchor: [0, 0]
+    });
+  }
+  function drawAirports() {
+    airportMarkers.forEach(function (m) { map.removeLayer(m); });
+    airportMarkers = [];
+    // Entro il raggio, al massimo i 40 piu vicini
+    var list = [];
+    for (var i = 0; i < AIRPORTS.length; i++) {
+      var d = map.distance([AIRPORTS[i].lat, AIRPORTS[i].lon], CENTER);
+      if (d <= radiusNM * 1852) list.push({ a: AIRPORTS[i], d: d });
+    }
+    list.sort(function (x, y) { return x.d - y.d; });
+    list.slice(0, 40).forEach(function (it) {
+      var a = it.a;
+      var m = L.marker([a.lat, a.lon], {
+        icon: airportIcon(a), keyboard: false, zIndexOffset: -500
+      }).addTo(map);
+      m.bindPopup('<b>' + (a.iata || a.icao) + '</b> · ' + a.name, {
+        className: 'airport-popup', closeButton: false, offset: [0, -4]
+      });
+      airportMarkers.push(m);
+    });
+  }
+  // A vista larga niente sigle: restano solo i puntini
+  map.on('zoomend', function () {
+    document.getElementById('map').classList.toggle('zoom-far', map.getZoom() < 6);
+  });
 
   var sweepEl = document.getElementById('sweep');
   function positionSweep() {

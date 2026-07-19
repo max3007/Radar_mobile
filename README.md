@@ -49,6 +49,15 @@ tests/              unit test Vitest su src/domain.js
 legacy/             prototipo originale a file singolo (baseline di confronto)
 ```
 
+## Installazione come app (PWA)
+
+L'app è una PWA installabile: dalla pagina pubblicata, su **Android Chrome**
+compare il prompt "Aggiungi a schermata Home" (o menu ⋮ → *Installa app*);
+su **iOS Safari**: Condividi → *Aggiungi a Home*. Una volta installata parte
+a schermo pieno con icona e splash dedicate. L'app shell e le tile mappa
+recenti sono in cache per riaperture veloci; i dati di volo restano sempre
+in tempo reale (nessuna cache).
+
 ## Deploy su Vercel
 
 Il progetto è pronto per il deploy zero-config su Vercel (preset **Vite**
