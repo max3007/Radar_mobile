@@ -600,12 +600,20 @@ export function initApp() {
     document.getElementById('boardList').innerHTML = html || '<div class="row"><div class="name">Nessun contatto</div></div>';
   }
 
-  // ---------- Tendina compagnie con ricerca ----------
-  var pendingAirline = filterAirline;
+  // ---------- Filtro compagnia (nel pannello ricerca, applicazione immediata) ----------
   function airlinesPresent() {
     var names = {};
     for (var i = 0; i < lastAircraft.length; i++) names[airlineName(lastAircraft[i].flight)] = true;
     return Object.keys(names).sort();
+  }
+  function applyAirlineFilter(name) {
+    filterAirline = name;
+    document.getElementById('airlineSearch').value = name;
+    savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne });
+    updateHudFilters();
+    drawPlanes(lastAircraft);
+    renderBoard();
+    renderSearchResults();
   }
   function renderAirlineList() {
     var box = document.getElementById('airlineList');
@@ -621,8 +629,7 @@ export function initApp() {
     var opts = box.querySelectorAll('.opt');
     for (var j = 0; j < opts.length; j++) {
       opts[j].addEventListener('click', function () {
-        pendingAirline = this.getAttribute('data-name');
-        document.getElementById('airlineSearch').value = pendingAirline;
+        applyAirlineFilter(this.getAttribute('data-name'));
         box.style.display = 'none';
       });
     }
@@ -633,7 +640,6 @@ export function initApp() {
     renderAirlineList();
   });
   searchInput.addEventListener('input', function () {
-    pendingAirline = this.value.trim();
     document.getElementById('airlineList').style.display = 'block';
     renderAirlineList();
   });
@@ -1003,11 +1009,9 @@ export function initApp() {
     var newRadius = parseInt(document.getElementById('radiusSlider').value);
     var radiusChanged = (newRadius !== radiusNM);
     radiusNM = newRadius;
-    filterAirline = pendingAirline;
     filterAirborne = document.getElementById('chkAirborne').checked;
     savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne });
     updateHudFilters();
-    document.getElementById('airlineList').style.display = 'none';
     document.getElementById('settings').classList.remove('open');
     if (radiusChanged) {
       drawRings();
