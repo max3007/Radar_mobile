@@ -277,3 +277,7 @@
     .airport-popup .leaflet-popup-content { margin: 8px 12px; }
     .airport-popup .leaflet-popup-content b { color: var(--phosphor); }
     .airport-popup .leaflet-popup-tip { background: var(--panel); }
+
+    /* Chip postazione: la X per eliminare le postazioni salvate dall'utente */
+    .chip .del { margin-left: 7px; color: var(--muted); font-size: 10px; }
+    .chip .del:active { color: #ff6b5a; }

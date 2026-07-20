@@ -19,6 +19,10 @@ var radiusNM = DEFAULT_RADIUS_NM;
 var filterAirline = "";
 var filterAirborne = false;
 var mapStyle = DEFAULT_MAP_STYLE;
+// Multi-postazione: punti di osservazione salvati + selezione attiva.
+// 'gps' (segue la posizione) e 'anzio' sono di sistema, il resto e dell'utente.
+var userLocations = [];
+var activeLocation = 'gps';
 
 export function initApp() {
   if (typeof L === 'undefined') {
@@ -32,6 +36,22 @@ export function initApp() {
     if (typeof p.filterAirline === 'string') filterAirline = p.filterAirline;
     if (typeof p.filterAirborne === 'boolean') filterAirborne = p.filterAirborne;
     if (TILE_STYLES[p.mapStyle]) mapStyle = p.mapStyle;
+    if (Array.isArray(p.locations)) {
+      userLocations = p.locations.filter(function (l) {
+        return l && typeof l.id === 'string' && typeof l.label === 'string' &&
+               typeof l.lat === 'number' && typeof l.lon === 'number';
+      });
+    }
+    if (typeof p.activeLocationId === 'string') activeLocation = p.activeLocationId;
+  }
+  // La postazione attiva deve esistere ancora, altrimenti si torna al GPS
+  if (activeLocation !== 'gps' && activeLocation !== 'anzio' &&
+      !userLocations.some(function (l) { return l.id === activeLocation; })) {
+    activeLocation = 'gps';
+  }
+  function buildPrefs() {
+    return { radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne,
+             mapStyle: mapStyle, locations: userLocations, activeLocationId: activeLocation };
   }
   document.getElementById('radiusSlider').value = radiusNM;
   document.getElementById('radiusVal').textContent = radiusNM;
@@ -60,7 +80,7 @@ export function initApp() {
     for (var i = 0; i < chips.length; i++) {
       chips[i].classList.toggle('active', chips[i].getAttribute('data-style') === style);
     }
-    if (save) savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne, mapStyle: mapStyle });
+    if (save) savePrefs(buildPrefs());
   }
   setMapStyle(mapStyle, false);
   var styleChips = document.querySelectorAll('#mapStyleChips .chip');
@@ -670,7 +690,7 @@ export function initApp() {
   function applyAirlineFilter(name) {
     filterAirline = name;
     document.getElementById('airlineSearch').value = name;
-    savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne, mapStyle: mapStyle });
+    savePrefs(buildPrefs());
     updateHudFilters();
     drawPlanes(lastAircraft);
     renderBoard();
@@ -1071,7 +1091,7 @@ export function initApp() {
     var radiusChanged = (newRadius !== radiusNM);
     radiusNM = newRadius;
     filterAirborne = document.getElementById('chkAirborne').checked;
-    savePrefs({ radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne, mapStyle: mapStyle });
+    savePrefs(buildPrefs());
     updateHudFilters();
     document.getElementById('settings').classList.remove('open');
     if (radiusChanged) {
@@ -1091,30 +1111,93 @@ export function initApp() {
     fetchPlanes();
   }
 
+  // ---------- Multi-postazione ----------
+  // 'gps' segue la posizione del telefono; 'anzio' e il default fisso;
+  // le altre voci sono postazioni salvate dall'utente (centro mappa + nome).
+  var isSecure = (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+  function activateLocation(id, recenter) {
+    activeLocation = id;
+    renderLocations();
+    savePrefs(buildPrefs());
+    if (id === 'gps') {
+      if (navigator.geolocation && isSecure) {
+        observerLabel = 'rilevo posizione\u2026'; updateHudFilters();
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            if (activeLocation !== 'gps') return; // nel frattempo e stata scelta un'altra postazione
+            CENTER = [pos.coords.latitude, pos.coords.longitude];
+            observerLabel = 'la tua posizione'; updateHudFilters();
+            applyCenter(recenter);
+          },
+          function (err) {
+            // Permesso negato o non disponibile: resta sul centro corrente
+            if (activeLocation !== 'gps') return;
+            observerLabel = 'Anzio (GPS non disp.)'; updateHudFilters();
+            console.warn('Geolocalizzazione non disponibile:', err && err.message);
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+        );
+      } else {
+        observerLabel = isSecure ? 'Anzio' : 'Anzio (serve HTTPS)'; updateHudFilters();
+      }
+      return;
+    }
+    if (id === 'anzio') {
+      CENTER = DEFAULT_CENTER.slice();
+      observerLabel = 'Anzio'; updateHudFilters();
+      applyCenter(recenter);
+      return;
+    }
+    for (var i = 0; i < userLocations.length; i++) {
+      if (userLocations[i].id === id) {
+        CENTER = [userLocations[i].lat, userLocations[i].lon];
+        observerLabel = userLocations[i].label; updateHudFilters();
+        applyCenter(recenter);
+        return;
+      }
+    }
+  }
+  function renderLocations() {
+    var box = document.getElementById('locList');
+    var html = '<button class="chip loc' + (activeLocation === 'gps' ? ' active' : '') + '" data-id="gps">\u25c9 La mia posizione</button>' +
+      '<button class="chip loc' + (activeLocation === 'anzio' ? ' active' : '') + '" data-id="anzio">Anzio</button>';
+    for (var i = 0; i < userLocations.length; i++) {
+      var l = userLocations[i];
+      html += '<button class="chip loc' + (activeLocation === l.id ? ' active' : '') + '" data-id="' + l.id + '">' +
+        l.label.replace(/</g, '&lt;') + '<span class="del" data-del="' + l.id + '">\u2715</span></button>';
+    }
+    box.innerHTML = html;
+    var chips = box.querySelectorAll('.chip.loc');
+    for (var j = 0; j < chips.length; j++) {
+      chips[j].addEventListener('click', function (e) {
+        var del = e.target.getAttribute && e.target.getAttribute('data-del');
+        if (del) {
+          e.stopPropagation();
+          userLocations = userLocations.filter(function (l) { return l.id !== del; });
+          if (activeLocation === del) { activateLocation('gps', true); return; }
+          renderLocations();
+          savePrefs(buildPrefs());
+          return;
+        }
+        activateLocation(this.getAttribute('data-id'), true);
+      });
+    }
+  }
+  document.getElementById('locSave').addEventListener('click', function () {
+    var name = document.getElementById('locName').value.trim();
+    if (!name) name = 'Postazione ' + (userLocations.length + 1);
+    var c = map.getCenter();
+    var loc = { id: 'loc' + Date.now(), label: name.substring(0, 20),
+                lat: Math.round(c.lat * 10000) / 10000, lon: Math.round(c.lng * 10000) / 10000 };
+    userLocations.push(loc);
+    document.getElementById('locName').value = '';
+    activateLocation(loc.id, true); // renderLocations + savePrefs inclusi
+  });
+
   // ---------- Avvio ----------
   drawRings();
   positionSweep();
   updateHudFilters();
   startPolling();
-
-  // Geolocalizzazione: il centro radar segue la posizione dell'utente
-  var isSecure = (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-  if (navigator.geolocation && isSecure) {
-    observerLabel = 'rilevo posizione\u2026'; updateHudFilters();
-    navigator.geolocation.getCurrentPosition(
-      function (pos) {
-        CENTER = [pos.coords.latitude, pos.coords.longitude];
-        observerLabel = 'la tua posizione'; updateHudFilters();
-        applyCenter(true);
-      },
-      function (err) {
-        // Permesso negato o non disponibile: resta su Anzio
-        observerLabel = 'Anzio (GPS non disp.)'; updateHudFilters();
-        console.warn('Geolocalizzazione non disponibile:', err && err.message);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
-  } else {
-    observerLabel = isSecure ? 'Anzio' : 'Anzio (serve HTTPS)'; updateHudFilters();
-  }
+  activateLocation(activeLocation, true);
 }
