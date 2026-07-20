@@ -488,6 +488,7 @@ export function initApp() {
     document.getElementById('settings').classList.remove('open');
     document.getElementById('searchPanel').classList.remove('open');
     hideAboveDialog();
+    hideConfirm();
     closeSheet();
   }
   function updateSelectedIcons(prevSel, newSel) {
@@ -1173,16 +1174,92 @@ export function initApp() {
         var del = e.target.getAttribute && e.target.getAttribute('data-del');
         if (del) {
           e.stopPropagation();
-          userLocations = userLocations.filter(function (l) { return l.id !== del; });
-          if (activeLocation === del) { activateLocation('gps', true); return; }
-          renderLocations();
-          savePrefs(buildPrefs());
+          var loc = userLocations.filter(function (l) { return l.id === del; })[0];
+          var label = loc ? loc.label : 'questa postazione';
+          // Conferma prima di eliminare: la X da sola era troppo facile da toccare
+          askConfirm('Eliminare la postazione\n«' + label + '»?', function () {
+            userLocations = userLocations.filter(function (l) { return l.id !== del; });
+            if (activeLocation === del) { activateLocation('gps', true); return; }
+            renderLocations();
+            savePrefs(buildPrefs());
+          });
           return;
         }
         activateLocation(this.getAttribute('data-id'), true);
       });
     }
   }
+
+  // ---------- Dialog di conferma generico ----------
+  var confirmCb = null;
+  function askConfirm(msg, onYes) {
+    confirmCb = onYes;
+    document.getElementById('confirmTitle').textContent = msg;
+    document.getElementById('confirmDialog').style.display = 'block';
+  }
+  function hideConfirm() {
+    document.getElementById('confirmDialog').style.display = 'none';
+    confirmCb = null;
+  }
+  document.getElementById('confirmYes').addEventListener('click', function () {
+    var cb = confirmCb;
+    hideConfirm();
+    if (cb) cb();
+  });
+  document.getElementById('confirmNo').addEventListener('click', hideConfirm);
+
+  // ---------- Ricerca luogo per creare una postazione ----------
+  function renderPlaceResults(list) {
+    var box = document.getElementById('locSearchResults');
+    if (!list || !list.length) { box.innerHTML = ''; return; }
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i];
+      html += '<div class="lr" data-i="' + i + '">' + r.name.replace(/</g, '&lt;') +
+        (r.detail ? '<small>' + r.detail.replace(/</g, '&lt;') + '</small>' : '') + '</div>';
+    }
+    box.innerHTML = html;
+    var rows = box.querySelectorAll('.lr');
+    for (var j = 0; j < rows.length; j++) {
+      rows[j].addEventListener('click', function () {
+        var r = list[parseInt(this.getAttribute('data-i'), 10)];
+        // Centra la mappa sul luogo (senza cambiare la postazione attiva) e
+        // precompila il nome: basta poi premere "+ SALVA QUI"
+        map.setView([r.lat, r.lon], Math.max(map.getZoom(), 9));
+        document.getElementById('locName').value = r.name.substring(0, 20);
+        box.innerHTML = '';
+        document.getElementById('locSearchNote').textContent = 'Luogo pronto: premi "+ SALVA QUI" per memorizzarlo';
+      });
+    }
+  }
+  async function searchPlace() {
+    var q = document.getElementById('locSearch').value.trim();
+    var note = document.getElementById('locSearchNote');
+    if (!q) { note.textContent = 'Digita un luogo da cercare'; return; }
+    note.textContent = 'Cerco “' + q + '”…';
+    document.getElementById('locSearchResults').innerHTML = '';
+    try {
+      var url = API.geocode + '?format=json&limit=6&addressdetails=0&q=' + encodeURIComponent(q);
+      var res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      if (!Array.isArray(data) || !data.length) { note.textContent = 'Nessun luogo trovato per “' + q + '”'; return; }
+      var list = data.map(function (d) {
+        var parts = (d.display_name || '').split(',').map(function (s) { return s.trim(); });
+        return { name: parts[0] || d.display_name || q,
+                 detail: parts.slice(1, 4).join(', '),
+                 lat: parseFloat(d.lat), lon: parseFloat(d.lon) };
+      }).filter(function (r) { return !isNaN(r.lat) && !isNaN(r.lon); });
+      note.textContent = 'Tocca un risultato per centrare la mappa';
+      renderPlaceResults(list);
+    } catch (e) {
+      note.textContent = 'Ricerca non riuscita (' + e.message + ')';
+    }
+  }
+  document.getElementById('locSearchBtn').addEventListener('click', searchPlace);
+  document.getElementById('locSearch').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); searchPlace(); }
+  });
   document.getElementById('locSave').addEventListener('click', function () {
     var name = document.getElementById('locName').value.trim();
     if (!name) name = 'Postazione ' + (userLocations.length + 1);

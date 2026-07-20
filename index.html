@@ -74,12 +74,21 @@
   </div>
 
   <!-- Finestra SOPRA DI TE: conferma quando l'aereo piu vicino e basso sull'orizzonte -->
-  <div id="aboveDialog" style="display:none;">
-    <div id="aboveTitle">--</div>
-    <div id="aboveInfo">--</div>
-    <div class="aboveBtns">
+  <div id="aboveDialog" class="dialog" style="display:none;">
+    <div id="aboveTitle" class="dialogTitle">--</div>
+    <div id="aboveInfo" class="dialogInfo">--</div>
+    <div class="dialogBtns">
       <button id="aboveGo" class="chip">MOSTRA COMUNQUE</button>
       <button id="aboveCancel" class="chip">ANNULLA</button>
+    </div>
+  </div>
+
+  <!-- Finestra di conferma generica (es. eliminazione postazione) -->
+  <div id="confirmDialog" class="dialog" style="display:none;">
+    <div id="confirmTitle" class="dialogTitle">--</div>
+    <div class="dialogBtns">
+      <button id="confirmYes" class="chip" style="border-color:#dc2828;color:#ff6b5a;">ELIMINA</button>
+      <button id="confirmNo" class="chip">ANNULLA</button>
     </div>
   </div>
 
@@ -104,12 +113,19 @@
     <h2>IMPOSTAZIONI</h2>
     <label style="margin-top:0;">POSTAZIONE DI OSSERVAZIONE (si applica subito)</label>
     <div id="locList" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+    <div style="display:flex;gap:6px;margin-top:10px;">
+      <input type="text" id="locSearch" placeholder="Cerca un luogo (città, indirizzo…)" autocomplete="off"
+        style="flex:1;min-width:0;padding:8px;border-radius:8px;font-family:var(--mono);font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--line);">
+      <button id="locSearchBtn" class="chip" style="flex-shrink:0;">CERCA</button>
+    </div>
+    <div id="locSearchResults"></div>
+    <div id="locSearchNote" style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.5px;"></div>
     <div style="display:flex;gap:6px;margin-top:8px;">
-      <input type="text" id="locName" placeholder="Nome nuova postazione" autocomplete="off" maxlength="20"
+      <input type="text" id="locName" placeholder="Nome postazione" autocomplete="off" maxlength="20"
         style="flex:1;min-width:0;padding:8px;border-radius:8px;font-family:var(--mono);font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--line);">
       <button id="locSave" class="chip" style="flex-shrink:0;">+ SALVA QUI</button>
     </div>
-    <div style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.5px;">"+ SALVA QUI" memorizza il centro attuale della mappa come postazione</div>
+    <div style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.5px;">Cerca un luogo (oppure sposta la mappa), poi "+ SALVA QUI" memorizza il centro come postazione</div>
     <label>RAGGIO DI RICERCA: <span id="radiusVal">100</span> NM</label>
     <input type="range" id="radiusSlider" min="25" max="250" step="25" value="100">
     <div class="switch">

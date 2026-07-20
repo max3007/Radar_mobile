@@ -34,5 +34,7 @@ export const API = {
   routeCallsign: 'https://api.adsbdb.com/v0/callsign/',      // + callsign
   // Foto aerei
   photoHex: 'https://api.planespotters.net/pub/photos/hex/', // + hex ICAO
-  photoReg: 'https://api.planespotters.net/pub/photos/reg/'  // + registrazione
+  photoReg: 'https://api.planespotters.net/pub/photos/reg/', // + registrazione
+  // Ricerca luoghi per le postazioni (Nominatim/OSM, gratuita, senza chiave)
+  geocode: 'https://nominatim.openstreetmap.org/search'      // ?format=json&q=...
 };
