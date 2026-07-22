@@ -1,24 +1,35 @@
 # RADAR · Anzio
 
-Radar aerei in tempo reale pensato per smartphone: mappa scura stile
-"schermo radar" con gli aerei nel raggio scelto attorno al punto di
-osservazione (default Anzio, oppure la posizione GPS del telefono).
+Radar aerei in tempo reale pensato per smartphone: mappa con gli aerei nel
+raggio scelto attorno a un punto di osservazione (la posizione GPS del
+telefono, Anzio, o una postazione salvata).
 
 Funzionalità principali:
 
 - mappa Leaflet con anelli di distanza, sweep radar e scie degli aerei;
+- **stili mappa** selezionabili: rilievo (default), satellite, radar scuro;
+- **aeroporti** nel raggio con sigla e nome (tap per il dettaglio);
 - scheda dettaglio volo (compagnia, tipo, quota, velocità, fase di volo,
-  rotta origine→destinazione, foto dell'aereo, dati tecnici);
+  rotta origine→destinazione, foto dell'aereo, dati tecnici); le rotte
+  d'archivio incoerenti con la posizione reale vengono nascoste;
 - bussola **MIRA**: ruota il telefono finché non punti verso l'aereo
   selezionato;
+- **SOPRA DI TE**: salta all'aereo più vicino, con conferma se è troppo
+  basso sull'orizzonte per essere visto;
 - ricerca tra gli aerei nel raggio e ricerca mondiale per numero di volo;
 - classifica delle compagnie in volo e filtri (raggio, compagnia, esclusione
-  aerei a terra) con preferenze persistenti.
+  aerei a terra);
+- **postazioni multiple**: GPS, Anzio e punti salvati dall'utente (cercando
+  un luogo per nome o salvando il centro della mappa), con selezione
+  immediata; preferenze e postazioni persistono tra le sessioni.
 
 Dati forniti da API pubbliche gratuite chiamate direttamente dal client:
 [airplanes.live](https://airplanes.live) (posizioni ADS-B),
 [adsbdb.com](https://www.adsbdb.com) (rotte),
-[planespotters.net](https://www.planespotters.net) (foto).
+[planespotters.net](https://www.planespotters.net) (foto),
+[Nominatim/OpenStreetMap](https://nominatim.openstreetmap.org) (ricerca
+luoghi). Le basemap sono tile [Esri](https://www.esri.com) (rilievo,
+satellite) e [CARTO](https://carto.com)/OSM (radar scuro).
 
 ## Sviluppo
 
@@ -39,12 +50,17 @@ oppure la preview di Vercel.
 ```
 index.html          markup dell'app (nessuno script inline)
 src/main.js         entry point: stili, avvio app
-src/app.js          logica applicativa: mappa, marker, pannelli, polling, MIRA
-src/domain.js       funzioni pure (bearing, fase di volo, emergenze, callsign…)
-src/config.js       costanti: centro default, raggio, intervallo polling, URL API
+src/app.js          logica applicativa: mappa, marker, pannelli, polling, MIRA,
+                    postazioni, aeroporti, ricerca luoghi
+src/domain.js       funzioni pure (bearing, fase di volo, emergenze, callsign,
+                    coerenza rotta…)
+src/config.js       costanti: centro default, raggio, polling, URL API, stili mappa
 src/prefs.js        preferenze persistenti (localStorage)
-src/data/*.json     dizionario compagnie ICAO e mappa prefissi IATA→ICAO
+src/data/*.json     compagnie ICAO, prefissi IATA→ICAO, aeroporti
 src/styles.css      stili (tema "fosforo" HUD)
+public/             icone PWA (generate da scripts/make-icons.mjs)
+scripts/            generazione icone (uso una tantum)
+vite.config.js      build Vite + vite-plugin-pwa (manifest, service worker)
 tests/              unit test Vitest su src/domain.js
 legacy/             prototipo originale a file singolo (baseline di confronto)
 ```
