@@ -166,8 +166,9 @@ export function initApp() {
     return elevationAngle(CENTER, selectedAc.lat, selectedAc.lon, selectedAc.alt_baro);
   }
   function updateMiraStatic() {
+    // Stato iniziale della riga elevazione, prima che arrivino i sensori
     var elev = miraTargetElevation();
-    document.getElementById('miraElev').textContent = elev == null ? '--' : elev + '\u00B0';
+    document.getElementById('miraSub').textContent = 'elevazione aereo ' + (elev == null ? '--' : elev + '\u00B0');
   }
   // Smoothing: componenti circolari per l'azimut (salto 359->0) + EMA per il pitch
   var smoothSin = null, smoothCos = null, smoothBeta = null;
@@ -214,6 +215,7 @@ export function initApp() {
 
     var target = document.getElementById('miraTarget');
     var status = document.getElementById('miraStatus');
+    var sub = document.getElementById('miraSub');
     var locked = document.getElementById('miraLocked');
     var adA = Math.abs(diffAz);
     var adE = hasPitch ? Math.abs(diffEl) : 0;
@@ -224,23 +226,30 @@ export function initApp() {
     if (!miraLocked && maxDiff < LOCK_IN) miraLocked = true;
     else if (miraLocked && maxDiff > LOCK_OUT) miraLocked = false;
 
+    // Due righe SEMPRE presenti e su singola riga (rotazione sopra, elevazione
+    // sotto): l'altezza del blocco non cambia mai, quindi il mirino non trasla.
     if (miraLocked) {
-      // Fermo al centro: niente inseguimento del micro-rumore dei sensori
-      target.style.left = '50%';
+      target.style.left = '50%';   // fermo al centro: niente micro-rumore
       target.style.top = '50%';
-      if (locked.style.display !== 'block') {
-        status.textContent = '\u2708 ALLINEATO \u2014 GUARDA L\u00C0!';
-        locked.style.display = 'block';
-      }
+      status.textContent = '\u2708 ALLINEATO \u2014 GUARDA L\u00C0!';
+      sub.textContent = 'aereo inquadrato \u2713';
+      locked.style.display = 'block';
     } else {
       var clamp = function (v) { return Math.max(-45, Math.min(45, v / SCALE_DEG * 45)); };
       target.style.left = (50 + clamp(diffAz)) + '%';
       target.style.top = (hasPitch ? (50 - clamp(diffEl)) : 50) + '%';
       locked.style.display = 'none';
-      var parts = [];
-      if (adA >= LOCK_IN) parts.push((diffAz > 0 ? 'DESTRA ' : 'SINISTRA ') + Math.round(adA) + '\u00B0');
-      if (hasPitch && adE >= LOCK_IN) parts.push((diffEl > 0 ? 'ALZA ' : 'ABBASSA ') + Math.round(adE) + '\u00B0');
-      status.textContent = parts.length ? parts.join(' \u00B7 ') : 'quasi\u2026 muovi piano';
+      // Riga 1: rotazione (sempre)
+      status.textContent = adA < LOCK_IN ? '\u25CE rotazione ok'
+        : ((diffAz > 0 ? 'DESTRA ' : 'SINISTRA ') + Math.round(adA) + '\u00B0');
+      // Riga 2: elevazione (sempre sotto)
+      if (!hasPitch) {
+        var te = miraTargetElevation();
+        sub.textContent = 'elevazione aereo ' + (te == null ? '--' : te + '\u00B0');
+      } else {
+        sub.textContent = adE < LOCK_IN ? '\u25CE elevazione ok'
+          : ((diffEl > 0 ? 'ALZA ' : 'ABBASSA ') + Math.round(adE) + '\u00B0');
+      }
     }
   }
   function startMira() {
