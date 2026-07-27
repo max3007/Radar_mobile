@@ -26,9 +26,12 @@ export const TILE_STYLES = {
 };
 export const DEFAULT_MAP_STYLE = 'topo';
 
-// "IN ARRIVO": orizzonte temporale e soglia di distanza dei passaggi previsti
-export const PASS_HORIZON_MIN = 30;
+// "IN ARRIVO": orizzonte temporale e soglia di distanza dei passaggi previsti.
+// PASS_SCAN_NM: raggio (max API) usato per la scansione dedicata quando il
+// pannello e aperto, cosi si "vedono" gli aerei molto prima del raggio mappa.
+export const PASS_HORIZON_MIN = 40;
 export const DEFAULT_PASS_KM = 15;
+export const PASS_SCAN_NM = 250;
 
 export const API = {
   // Posizioni ADS-B in tempo reale (gratuita, senza chiave)

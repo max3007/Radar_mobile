@@ -18,10 +18,12 @@ Funzionalità principali:
   (inclinazione), con calibrazione dell'orizzonte;
 - **SOPRA DI TE**: salta all'aereo più vicino, con conferma se è troppo
   basso sull'orizzonte per essere visto;
-- **IN ARRIVO**: previsione dei prossimi passaggi ravvicinati (calcolo del
-  punto di massimo avvicinamento da rotta e velocità): tabella cliccabile con
-  minuti al passaggio, distanza, elevazione e direzione, soglia regolabile,
-  proiezione sulla mappa e aggiornamento live;
+- **IN ARRIVO**: previsione dei prossimi passaggi ravvicinati (fino a ~40 min)
+  dal calcolo del punto di massimo avvicinamento (rotta + velocità), con una
+  scansione dedicata a raggio ampio (250 NM) per il massimo preaviso anche a
+  mappa stretta: tabella cliccabile con minuti al passaggio, distanza,
+  elevazione e direzione, soglia regolabile, proiezione sulla mappa e
+  aggiornamento live;
 - ricerca tra gli aerei nel raggio e ricerca mondiale per numero di volo;
 - classifica delle compagnie in volo e filtri (raggio, compagnia, esclusione
   aerei a terra);

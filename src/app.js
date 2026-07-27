@@ -5,7 +5,7 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
-import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM } from './config.js';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM } from './config.js';
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
@@ -825,13 +825,17 @@ export function initApp() {
   }
 
   // ---------- IN ARRIVO: passaggi previsti (CPA) ----------
-  var passLayer = null;  // proiezioni sulla mappa (linea + crocetta)
+  var passLayer = null;      // proiezioni sulla mappa (linea + crocetta)
+  var passAircraft = [];     // set esteso dalla scansione a raggio ampio
+  var passScanSeq = 0;       // scarta risposte fuori ordine della scansione
   function isPassesOpen() { return document.getElementById('passes').classList.contains('open'); }
 
-  // Calcola e ordina i passaggi entro soglia e orizzonte temporale
+  // Calcola e ordina i passaggi entro soglia e orizzonte temporale.
+  // Usa il set della scansione ampia (250 NM), cosi vede gli aerei molto
+  // prima del raggio della mappa.
   function computePasses() {
     var out = [];
-    var filtered = lastAircraft.filter(passesFilters);
+    var filtered = passAircraft.filter(passesFilters);
     for (var i = 0; i < filtered.length; i++) {
       var ac = filtered[i];
       var pass = nextPass(CENTER, ac);
@@ -842,6 +846,26 @@ export function initApp() {
     }
     out.sort(function (a, b) { return a.pass.tMin - b.pass.tMin; });
     return out;
+  }
+
+  // Scansione dedicata a raggio massimo (solo a pannello aperto): estende il
+  // preaviso senza toccare il raggio della mappa. Rinfrescata a ogni polling.
+  async function fetchPassScan() {
+    if (!isPassesOpen()) return;
+    var seq = ++passScanSeq;
+    try {
+      var res = await fetch(API.planesPoint + CENTER[0] + '/' + CENTER[1] + '/' + PASS_SCAN_NM);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      if (seq !== passScanSeq || !isPassesOpen()) return;
+      passAircraft = data.ac || [];
+    } catch (e) {
+      if (seq !== passScanSeq) return;
+      passAircraft = lastAircraft; // fallback al set nel raggio corrente
+    }
+    if (!isPassesOpen()) return;
+    renderPasses();
+    drawPassProjections();
   }
 
   function passFlightLabel(ac) {
@@ -883,8 +907,8 @@ export function initApp() {
     for (var k = 0; k < rows.length; k++) {
       rows[k].addEventListener('click', function () {
         var hex = this.getAttribute('data-hex');
-        for (var m = 0; m < lastAircraft.length; m++) {
-          if (lastAircraft[m].hex === hex) { passPickAndClose(lastAircraft[m]); return; }
+        for (var m = 0; m < passAircraft.length; m++) {
+          if (passAircraft[m].hex === hex) { passPickAndClose(passAircraft[m]); return; }
         }
       });
     }
@@ -893,6 +917,16 @@ export function initApp() {
   function passPickAndClose(ac) {
     document.getElementById('passes').classList.remove('open');
     clearPassProjections();
+    // L'aereo puo essere fuori dal raggio della mappa (scansione ampia): in
+    // quel caso lo aggancio come marker di ricerca, cosi il polling non lo
+    // deseleziona (stesso meccanismo della ricerca globale per numero volo).
+    var inRange = lastAircraft.some(function (a) { return a.hex === ac.hex; });
+    if (!inRange && ac.lat != null) {
+      clearSearchMarker();
+      searchMarker = L.marker([ac.lat, ac.lon], { icon: planeIcon(ac.track, '#ffb454', true) }).addTo(map);
+      searchMarker._ac = ac;
+      searchMarker.on('click', function (e) { L.DomEvent.stopPropagation(e); openSheet(this._ac); });
+    }
     if (ac.lat != null) map.setView([ac.lat, ac.lon], 9, { animate: true });
     openSheet(ac);
   }
@@ -920,8 +954,7 @@ export function initApp() {
   }
   function refreshPasses() {
     if (!isPassesOpen()) return;
-    renderPasses();
-    drawPassProjections();
+    fetchPassScan(); // rinfresca il set ampio, poi ridisegna
   }
 
   // ---------- Disegno ----------
@@ -1078,8 +1111,8 @@ export function initApp() {
     closeAll();
     if (!wasOpen) {
       document.getElementById('passes').classList.add('open');
-      renderPasses();
-      drawPassProjections();
+      document.getElementById('passList').innerHTML = '<div class="empty">Scansione a raggio ampio…</div>';
+      fetchPassScan(); // legge a 250 NM poi popola la tabella e le proiezioni
     }
   });
   document.getElementById('btnSettings').addEventListener('click', function () {
