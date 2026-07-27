@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
   bearingBetween, bearingFromCenter, elevationAngle, destPoint,
-  emergencyInfo, flightPhase, routeConsistent
+  emergencyInfo, flightPhase, routeConsistent, nextPass
 } from '../src/domain.js';
 
 const ANZIO = [41.4479, 12.6285];
@@ -204,5 +204,42 @@ describe('flightPhase', () => {
   it('crociera sopra i 24k ft, altrimenti livellato', () => {
     expect(flightPhase({ alt_baro: 36000, baro_rate: 0 })).toBe('IN CROCIERA');
     expect(flightPhase({ alt_baro: 12000, baro_rate: 0 })).toBe('IN VOLO LIVELLATO');
+  });
+});
+
+describe('nextPass (passaggio piu ravvicinato)', () => {
+  const ANZIO = [41.4479, 12.6285];
+
+  it('aereo a nord diretto a sud (verso il centro): sorvolo quasi sopra', () => {
+    // ~0.5 gradi a nord (~30 NM), track 180 (verso sud), 450 kt
+    const ac = { lat: ANZIO[0] + 0.5, lon: ANZIO[1], gs: 450, track: 180, alt_baro: 35000 };
+    const r = nextPass(ANZIO, ac);
+    expect(r).not.toBeNull();
+    expect(r.dMinKm).toBeLessThan(1);          // passa praticamente sopra
+    // 30 NM a 450 kt = 0.0667 h = 4 min circa
+    expect(r.tMin).toBeGreaterThan(3);
+    expect(r.tMin).toBeLessThan(5);
+    expect(r.elevAtPass).toBeGreaterThan(80);  // quasi allo zenit
+  });
+
+  it('aereo che si allontana: null', () => {
+    const ac = { lat: ANZIO[0] + 0.5, lon: ANZIO[1], gs: 450, track: 0, alt_baro: 35000 }; // va a nord
+    expect(nextPass(ANZIO, ac)).toBeNull();
+  });
+
+  it('passaggio laterale: distanza minima pari all offset', () => {
+    // aereo a nord che va verso est: passa alla distanza nord (~0.25 gradi = ~27 km)
+    const ac = { lat: ANZIO[0] + 0.25, lon: ANZIO[1] - 0.5, gs: 400, track: 90, alt_baro: 30000 };
+    const r = nextPass(ANZIO, ac);
+    expect(r).not.toBeNull();
+    expect(r.dMinKm).toBeGreaterThan(20);
+    expect(r.dMinKm).toBeLessThan(32);
+  });
+
+  it('aereo a terra, fermo o senza dati: null', () => {
+    expect(nextPass(ANZIO, { lat: 41.9, lon: 12.6, gs: 400, track: 180, alt_baro: 'ground' })).toBeNull();
+    expect(nextPass(ANZIO, { lat: 41.9, lon: 12.6, gs: 10, track: 180, alt_baro: 3000 })).toBeNull();
+    expect(nextPass(ANZIO, { lat: 41.9, lon: 12.6, gs: null, track: 180, alt_baro: 3000 })).toBeNull();
+    expect(nextPass(ANZIO, { lat: null, lon: null, gs: 400, track: 180 })).toBeNull();
   });
 });

@@ -26,6 +26,10 @@ export const TILE_STYLES = {
 };
 export const DEFAULT_MAP_STYLE = 'topo';
 
+// "IN ARRIVO": orizzonte temporale e soglia di distanza dei passaggi previsti
+export const PASS_HORIZON_MIN = 30;
+export const DEFAULT_PASS_KM = 15;
+
 export const API = {
   // Posizioni ADS-B in tempo reale (gratuita, senza chiave)
   planesPoint: 'https://api.airplanes.live/v2/point/',       // + lat/lon/raggioNM

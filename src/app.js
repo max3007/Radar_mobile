@@ -5,12 +5,12 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
-import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE } from './config.js';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM } from './config.js';
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
   bearingFromCenter, elevationAngle, emergencyInfo, flightPhase,
-  routeConsistent
+  routeConsistent, nextPass
 } from './domain.js';
 import AIRPORTS from './data/airports.json';
 
@@ -19,6 +19,7 @@ var radiusNM = DEFAULT_RADIUS_NM;
 var filterAirline = "";
 var filterAirborne = false;
 var mapStyle = DEFAULT_MAP_STYLE;
+var passKm = DEFAULT_PASS_KM;   // soglia distanza dei passaggi "IN ARRIVO"
 // Multi-postazione: punti di osservazione salvati + selezione attiva.
 // 'gps' (segue la posizione) e 'anzio' sono di sistema, il resto e dell'utente.
 var userLocations = [];
@@ -36,6 +37,7 @@ export function initApp() {
     if (typeof p.filterAirline === 'string') filterAirline = p.filterAirline;
     if (typeof p.filterAirborne === 'boolean') filterAirborne = p.filterAirborne;
     if (TILE_STYLES[p.mapStyle]) mapStyle = p.mapStyle;
+    if (p.passKm >= 5 && p.passKm <= 50) passKm = p.passKm;
     if (Array.isArray(p.locations)) {
       userLocations = p.locations.filter(function (l) {
         return l && typeof l.id === 'string' && typeof l.label === 'string' &&
@@ -51,10 +53,12 @@ export function initApp() {
   }
   function buildPrefs() {
     return { radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne,
-             mapStyle: mapStyle, locations: userLocations, activeLocationId: activeLocation };
+             mapStyle: mapStyle, passKm: passKm, locations: userLocations, activeLocationId: activeLocation };
   }
   document.getElementById('radiusSlider').value = radiusNM;
   document.getElementById('radiusVal').textContent = radiusNM;
+  document.getElementById('passKmSlider').value = passKm;
+  document.getElementById('passKmVal').textContent = passKm;
   document.getElementById('airlineSearch').value = filterAirline;
   document.getElementById('chkAirborne').checked = filterAirborne;
 
@@ -566,6 +570,8 @@ export function initApp() {
     document.getElementById('board').classList.remove('open');
     document.getElementById('settings').classList.remove('open');
     document.getElementById('searchPanel').classList.remove('open');
+    document.getElementById('passes').classList.remove('open');
+    clearPassProjections();
     hideAboveDialog();
     hideConfirm();
     closeSheet();
@@ -818,6 +824,106 @@ export function initApp() {
     return best;
   }
 
+  // ---------- IN ARRIVO: passaggi previsti (CPA) ----------
+  var passLayer = null;  // proiezioni sulla mappa (linea + crocetta)
+  function isPassesOpen() { return document.getElementById('passes').classList.contains('open'); }
+
+  // Calcola e ordina i passaggi entro soglia e orizzonte temporale
+  function computePasses() {
+    var out = [];
+    var filtered = lastAircraft.filter(passesFilters);
+    for (var i = 0; i < filtered.length; i++) {
+      var ac = filtered[i];
+      var pass = nextPass(CENTER, ac);
+      if (!pass) continue;
+      if (pass.tMin > PASS_HORIZON_MIN) continue;
+      if (pass.dMinKm > passKm) continue;
+      out.push({ ac: ac, pass: pass });
+    }
+    out.sort(function (a, b) { return a.pass.tMin - b.pass.tMin; });
+    return out;
+  }
+
+  function passFlightLabel(ac) {
+    var cs = (ac.flight || '').trim();
+    if (cs && routeCache[cs]) {
+      var num = fmtFlight(routeCache[cs].flightIata);
+      if (num) return num;
+    }
+    return cs || ac.hex.toUpperCase();
+  }
+
+  function renderPasses() {
+    var box = document.getElementById('passList');
+    var list = computePasses();
+    if (!list.length) {
+      box.innerHTML = '<div class="empty">Nessun passaggio ravvicinato previsto nei prossimi ' + PASS_HORIZON_MIN + ' minuti.</div>';
+      return;
+    }
+    var now = Date.now();
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var ac = list[i].ac, p = list[i].pass;
+      var mins = Math.max(0, Math.round(p.tMin));
+      var when = new Date(now + p.tMin * 60000);
+      var hh = ('0' + when.getHours()).slice(-2) + ':' + ('0' + when.getMinutes()).slice(-2);
+      var etaBig = mins <= 0 ? 'ora' : ('tra ' + mins + '′');
+      var km = p.dMinKm < 1 ? (Math.round(p.dMinKm * 1000) + ' m') : (p.dMinKm.toFixed(p.dMinKm < 10 ? 1 : 0) + ' km');
+      var overhead = (p.dMinKm < 3 || p.elevAtPass > 60);
+      html += '<div class="pr" data-hex="' + ac.hex + '">' +
+        '<div class="eta"><b>' + etaBig + '</b><span>' + hh + '</span></div>' +
+        '<div class="info"><div class="f">' + passFlightLabel(ac) + '</div>' +
+          '<small>' + airlineName(ac.flight) + (ac.t ? ' · ' + ac.t : '') + '</small>' +
+          (overhead ? '<span class="badge">SORVOLO</span>' : '') + '</div>' +
+        '<div class="geo">' + km + '<small>' + p.elevAtPass + '° · verso ' + compass(p.brgAtPass) + '</small></div>' +
+        '</div>';
+    }
+    box.innerHTML = html;
+    var rows = box.querySelectorAll('.pr');
+    for (var k = 0; k < rows.length; k++) {
+      rows[k].addEventListener('click', function () {
+        var hex = this.getAttribute('data-hex');
+        for (var m = 0; m < lastAircraft.length; m++) {
+          if (lastAircraft[m].hex === hex) { passPickAndClose(lastAircraft[m]); return; }
+        }
+      });
+    }
+  }
+
+  function passPickAndClose(ac) {
+    document.getElementById('passes').classList.remove('open');
+    clearPassProjections();
+    if (ac.lat != null) map.setView([ac.lat, ac.lon], 9, { animate: true });
+    openSheet(ac);
+  }
+
+  // Proiezioni sulla mappa: linea posizione attuale -> punto di passaggio + crocetta
+  function clearPassProjections() {
+    if (passLayer) { map.removeLayer(passLayer); passLayer = null; }
+  }
+  function drawPassProjections() {
+    clearPassProjections();
+    var list = computePasses();
+    if (!list.length) return;
+    passLayer = L.layerGroup();
+    for (var i = 0; i < list.length; i++) {
+      var ac = list[i].ac, p = list[i].pass;
+      L.polyline([[ac.lat, ac.lon], [p.passLat, p.passLon]], {
+        color: '#6fd3ff', weight: 1.2, opacity: 0.5, dashArray: '4,6', interactive: false
+      }).addTo(passLayer);
+      L.marker([p.passLat, p.passLon], {
+        icon: L.divIcon({ className: '', html: '<div class="pass-x">✕</div>', iconSize: [0, 0], iconAnchor: [0, 0] }),
+        interactive: false, keyboard: false
+      }).addTo(passLayer);
+    }
+    passLayer.addTo(map);
+  }
+  function refreshPasses() {
+    if (!isPassesOpen()) return;
+    renderPasses();
+    drawPassProjections();
+  }
+
   // ---------- Disegno ----------
   function drawPlanes(aircraft) {
     var seen = {};
@@ -917,6 +1023,7 @@ export function initApp() {
       errBar.style.display = 'none';
       drawPlanes(lastAircraft);
       renderBoard();
+      refreshPasses(); // aggiorna "IN ARRIVO" e proiezioni se il pannello e aperto
       if (selected) {
         var found = false;
         for (var i = 0; i < lastAircraft.length; i++) {
@@ -965,6 +1072,15 @@ export function initApp() {
     var wasOpen = document.getElementById('board').classList.contains('open');
     closeAll();
     if (!wasOpen) document.getElementById('board').classList.add('open');
+  });
+  document.getElementById('btnPasses').addEventListener('click', function () {
+    var wasOpen = isPassesOpen();
+    closeAll();
+    if (!wasOpen) {
+      document.getElementById('passes').classList.add('open');
+      renderPasses();
+      drawPassProjections();
+    }
   });
   document.getElementById('btnSettings').addEventListener('click', function () {
     var wasOpen = document.getElementById('settings').classList.contains('open');
@@ -1166,12 +1282,17 @@ export function initApp() {
   document.getElementById('radiusSlider').addEventListener('input', function () {
     document.getElementById('radiusVal').textContent = this.value;
   });
+  document.getElementById('passKmSlider').addEventListener('input', function () {
+    document.getElementById('passKmVal').textContent = this.value;
+  });
   document.getElementById('applyBtn').addEventListener('click', function () {
     var newRadius = parseInt(document.getElementById('radiusSlider').value);
     var radiusChanged = (newRadius !== radiusNM);
     radiusNM = newRadius;
+    passKm = parseInt(document.getElementById('passKmSlider').value);
     filterAirborne = document.getElementById('chkAirborne').checked;
     savePrefs(buildPrefs());
+    refreshPasses();
     updateHudFilters();
     document.getElementById('settings').classList.remove('open');
     if (radiusChanged) {

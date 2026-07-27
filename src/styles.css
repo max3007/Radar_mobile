@@ -358,3 +358,29 @@
     #miraBox .mira-lbl {
       position: absolute; font-size: 8px; letter-spacing: 1px; color: var(--muted); font-family: var(--mono);
     }
+
+    /* "IN ARRIVO": righe passaggi previsti (cliccabili) */
+    #passList .pr {
+      display: flex; align-items: center; gap: 10px; padding: 9px 4px;
+      border-bottom: 1px solid var(--line); cursor: pointer;
+    }
+    #passList .pr:last-child { border-bottom: none; }
+    #passList .pr:active { background: rgba(52,224,138,0.1); }
+    #passList .pr .eta { min-width: 62px; text-align: center; flex-shrink: 0; }
+    #passList .pr .eta b { display: block; font-size: 16px; font-weight: 700; color: var(--phosphor); line-height: 1.1; }
+    #passList .pr .eta span { display: block; font-size: 9px; color: var(--muted); margin-top: 1px; }
+    #passList .pr .info { flex: 1; min-width: 0; }
+    #passList .pr .info .f { font-size: 13px; font-weight: 700; color: var(--text); }
+    #passList .pr .info small { display: block; color: var(--muted); font-size: 10px; margin-top: 1px; }
+    #passList .pr .geo { text-align: right; flex-shrink: 0; font-size: 11px; color: var(--amber); }
+    #passList .pr .geo small { display: block; color: var(--muted); font-size: 9px; margin-top: 1px; }
+    #passList .pr .badge {
+      display: inline-block; font-size: 8px; font-weight: 700; letter-spacing: 0.5px;
+      color: var(--bg); background: var(--phosphor); border-radius: 3px; padding: 1px 4px; margin-top: 2px;
+    }
+    #passList .empty { font-size: 11px; color: var(--muted); padding: 10px 0; letter-spacing: 0.5px; }
+    /* Crocetta sul punto di passaggio previsto (mappa) */
+    .pass-x {
+      color: var(--ice); font-size: 16px; font-weight: 700; text-shadow: 0 0 4px rgba(6,10,14,0.9);
+      margin: -9px 0 0 -6px;
+    }

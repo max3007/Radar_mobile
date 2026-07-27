@@ -84,6 +84,46 @@ export function destPoint(lat, lon, brg, distM) {
   return [la2 * 180 / Math.PI, lo2 * 180 / Math.PI];
 }
 
+// Passaggio piu ravvicinato (CPA, Closest Point of Approach) di un aereo
+// rispetto all'osservatore, assumendo rotta e velocita attuali costanti.
+// Ritorna null se l'aereo e fermo, a terra, senza dati, o si sta allontanando.
+// { tMin: minuti al passaggio, dMinKm: distanza minima (km),
+//   passLat/passLon: punto di passaggio, elevAtPass: elevazione (gradi),
+//   brgAtPass: direzione dal centro verso il punto di passaggio }
+export function nextPass(center, ac) {
+  if (!ac || ac.lat == null || ac.lon == null) return null;
+  if (ac.gs == null || ac.track == null) return null;
+  if (ac.alt_baro === 'ground') return null;
+  var gs = ac.gs;
+  if (gs < 50) return null; // fermo o quasi: nessuna traiettoria utile
+  var clat = center[0], clon = center[1];
+  // Piano tangente locale in miglia nautiche (1 grado lat = 60 NM)
+  var nmLon = 60 * Math.cos(clat * Math.PI / 180);
+  var x = (ac.lon - clon) * nmLon;   // posizione aereo rispetto all'osservatore
+  var y = (ac.lat - clat) * 60;
+  var trk = ac.track * Math.PI / 180;
+  var vx = gs * Math.sin(trk), vy = gs * Math.cos(trk); // NM/h
+  var vv = vx * vx + vy * vy;
+  if (vv < 1e-6) return null;
+  var t = -(x * vx + y * vy) / vv;   // ore al punto di minimo
+  if (t <= 0) return null;           // gia passato o in allontanamento
+  var px = x + vx * t, py = y + vy * t;
+  var dMinNm = Math.sqrt(px * px + py * py);
+  var passLat = clat + py / 60;
+  var passLon = clon + px / nmLon;
+  var altM = (typeof ac.alt_baro === 'number' ? ac.alt_baro : 0) * 0.3048;
+  var groundM = dMinNm * 1852;
+  var elevAtPass = groundM < 1 ? 90 : Math.round(Math.atan2(altM, groundM) * 180 / Math.PI);
+  return {
+    tMin: t * 60,
+    dMinKm: dMinNm * 1.852,
+    passLat: passLat,
+    passLon: passLon,
+    elevAtPass: elevAtPass,
+    brgAtPass: bearingBetween(clat, clon, passLat, passLon)
+  };
+}
+
 // Verifica di plausibilita della rotta d'archivio (adsbdb) rispetto alla
 // posizione e alla prua reali dell'aereo. Il database delle rotte per
 // callsign e statico e a volte stantio: se l'aereo e lontano dal corridoio
