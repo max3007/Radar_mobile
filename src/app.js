@@ -747,7 +747,10 @@ export function initApp() {
   }
   map.on('click', closeAll);
 
-  // ---------- Classifica ----------
+  // ---------- Pannello TRAFFICO: lista aerei + classifica compagnie ----------
+  function isBoardOpen() { return document.getElementById('board').classList.contains('open'); }
+
+  // Classifica compagnie (tab COMPAGNIE)
   function renderBoard() {
     var counts = {};
     var filtered = lastAircraft.filter(passesFilters);
@@ -767,6 +770,70 @@ export function initApp() {
     document.getElementById('boardList').innerHTML = html || '<div class="row"><div class="name">Nessun contatto</div></div>';
   }
 
+  // Lista aerei nel raggio (tab AEREI): rispetta i filtri, ordinata per
+  // distanza, righe cliccabili che portano all'aereo.
+  function renderPlaneList() {
+    var list = lastAircraft.filter(function (a) { return a.lat != null && a.lon != null && passesFilters(a); });
+    list = list.map(function (a) { return { ac: a, d: map.distance([a.lat, a.lon], CENTER) }; })
+      .sort(function (x, y) { return x.d - y.d; });
+    document.getElementById('planeCount').textContent =
+      list.length ? (list.length + (list.length === 1 ? ' AEREO NEL RAGGIO' : ' AEREI NEL RAGGIO')) : '';
+    if (!list.length) {
+      document.getElementById('planeList').innerHTML = '<div class="empty">Nessun aereo nel raggio.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i].ac, km = list[i].d / 1000;
+      var flight = (a.flight || '').trim() || a.hex.toUpperCase();
+      var alt = a.alt_baro === 'ground' ? 'a terra' : (a.alt_baro != null ? a.alt_baro + ' ft' : '--');
+      var spd = a.gs != null ? Math.round(a.gs) + ' kt' : '--';
+      var emg = !!emergencyInfo(a);
+      var phase = flightPhase(a) || '';
+      html += '<div class="acrow' + (emg ? ' emg' : '') + '" data-hex="' + a.hex + '">' +
+        '<div class="ac-l"><div class="ac-f">' + flight + (emg ? '<span class="emgbadge">EMERG</span>' : '') + '</div>' +
+          '<div class="ac-sub">' + airlineName(a.flight) + (a.t ? ' · ' + a.t : '') + (phase ? ' · ' + phase : '') + '</div></div>' +
+        '<div class="ac-r"><div class="ac-alt">' + alt + ' · ' + spd + '</div>' +
+          '<div class="ac-dist">' + km.toFixed(0) + ' km ' + compass(bearingFromCenter(CENTER, a.lat, a.lon)) + '</div></div>' +
+        '</div>';
+    }
+    var box = document.getElementById('planeList');
+    box.innerHTML = html;
+    var rows = box.querySelectorAll('.acrow');
+    for (var k = 0; k < rows.length; k++) {
+      rows[k].addEventListener('click', function () {
+        var hex = this.getAttribute('data-hex');
+        for (var m = 0; m < lastAircraft.length; m++) {
+          if (lastAircraft[m].hex === hex) {
+            document.getElementById('board').classList.remove('open');
+            pickAndClose(lastAircraft[m]);
+            return;
+          }
+        }
+      });
+    }
+  }
+
+  // Aggiorna le viste del pannello TRAFFICO (solo se aperto)
+  function refreshBoard() {
+    if (!isBoardOpen()) return;
+    renderPlaneList();
+    renderBoard();
+  }
+
+  // Tab AEREI / COMPAGNIE
+  (function () {
+    var tabs = document.querySelectorAll('#board .tabs .tab');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].addEventListener('click', function () {
+        var which = this.getAttribute('data-tab');
+        for (var j = 0; j < tabs.length; j++) tabs[j].classList.toggle('active', tabs[j] === this);
+        document.getElementById('tabPlanes').style.display = which === 'planes' ? 'block' : 'none';
+        document.getElementById('tabAirlines').style.display = which === 'airlines' ? 'block' : 'none';
+      });
+    }
+  })();
+
   // ---------- Filtro compagnia (nel pannello ricerca, applicazione immediata) ----------
   function airlinesPresent() {
     var names = {};
@@ -779,7 +846,7 @@ export function initApp() {
     savePrefs(buildPrefs());
     updateHudFilters();
     drawPlanes(lastAircraft);
-    renderBoard();
+    refreshBoard();
     renderSearchResults();
   }
   function renderAirlineList() {
@@ -1055,7 +1122,7 @@ export function initApp() {
       lastAircraft = data.ac || [];
       errBar.style.display = 'none';
       drawPlanes(lastAircraft);
-      renderBoard();
+      refreshBoard(); // aggiorna lista aerei + classifica se il pannello e aperto
       refreshPasses(); // aggiorna "IN ARRIVO" e proiezioni se il pannello e aperto
       if (selected) {
         var found = false;
@@ -1104,7 +1171,10 @@ export function initApp() {
   document.getElementById('btnBoard').addEventListener('click', function () {
     var wasOpen = document.getElementById('board').classList.contains('open');
     closeAll();
-    if (!wasOpen) document.getElementById('board').classList.add('open');
+    if (!wasOpen) {
+      document.getElementById('board').classList.add('open');
+      refreshBoard();
+    }
   });
   document.getElementById('btnPasses').addEventListener('click', function () {
     var wasOpen = isPassesOpen();

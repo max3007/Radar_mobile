@@ -384,3 +384,32 @@
       color: var(--ice); font-size: 16px; font-weight: 700; text-shadow: 0 0 4px rgba(6,10,14,0.9);
       margin: -9px 0 0 -6px;
     }
+
+    /* Pannello TRAFFICO: tab AEREI / COMPAGNIE */
+    .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+    .tabs .tab {
+      flex: 1; padding: 8px; border: 1px solid var(--line); border-radius: 8px;
+      background: var(--bg); color: var(--muted); font-family: var(--mono);
+      font-size: 11px; font-weight: 700; letter-spacing: 1.5px; cursor: pointer;
+    }
+    .tabs .tab.active { border-color: var(--phosphor-dim); background: rgba(52,224,138,0.1); color: var(--phosphor); }
+    #planeCount { font-size: 10px; color: var(--muted); letter-spacing: 1px; margin-bottom: 6px; }
+    /* Righe lista aerei (cliccabili) */
+    #planeList .acrow {
+      display: flex; align-items: center; gap: 10px; padding: 8px 4px;
+      border-bottom: 1px solid var(--line); cursor: pointer;
+    }
+    #planeList .acrow:last-child { border-bottom: none; }
+    #planeList .acrow:active { background: rgba(52,224,138,0.1); }
+    #planeList .acrow.emg { border-left: 2px solid #dc2828; padding-left: 6px; }
+    #planeList .ac-l { flex: 1; min-width: 0; }
+    #planeList .ac-f { font-size: 13px; font-weight: 700; color: var(--phosphor); }
+    #planeList .ac-f .emgbadge {
+      font-size: 8px; font-weight: 700; color: #fff; background: #dc2828;
+      border-radius: 3px; padding: 1px 4px; margin-left: 6px; letter-spacing: 0.5px;
+    }
+    #planeList .ac-sub { font-size: 10px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #planeList .ac-r { text-align: right; flex-shrink: 0; }
+    #planeList .ac-alt { font-size: 12px; color: var(--text); }
+    #planeList .ac-dist { font-size: 10px; color: var(--amber); margin-top: 1px; }
+    #planeList .empty { font-size: 11px; color: var(--muted); padding: 10px 0; }

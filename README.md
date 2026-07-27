@@ -25,8 +25,9 @@ Funzionalità principali:
   elevazione e direzione, soglia regolabile, proiezione sulla mappa e
   aggiornamento live;
 - ricerca tra gli aerei nel raggio e ricerca mondiale per numero di volo;
-- classifica delle compagnie in volo e filtri (raggio, compagnia, esclusione
-  aerei a terra);
+- pannello **TRAFFICO** a due schede: lista degli aerei nel raggio (cliccabile,
+  ordinata per distanza, con emergenze evidenziate) e classifica delle
+  compagnie in volo; filtri (raggio, compagnia, esclusione aerei a terra);
 - **postazioni multiple**: GPS, Anzio e punti salvati dall'utente (cercando
   un luogo per nome o salvando il centro della mappa), con selezione
   immediata; preferenze e postazioni persistono tra le sessioni.

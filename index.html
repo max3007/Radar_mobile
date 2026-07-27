@@ -112,8 +112,17 @@
 
   <div id="board" class="bsheet">
     <div class="grab"></div>
-    <h2>COMPAGNIE IN VOLO</h2>
-    <div id="boardList"></div>
+    <div class="tabs">
+      <button class="tab active" data-tab="planes">AEREI</button>
+      <button class="tab" data-tab="airlines">COMPAGNIE</button>
+    </div>
+    <div id="tabPlanes">
+      <div id="planeCount"></div>
+      <div id="planeList"></div>
+    </div>
+    <div id="tabAirlines" style="display:none;">
+      <div id="boardList"></div>
+    </div>
   </div>
 
   <div id="passes" class="bsheet" style="z-index:1292;max-height:66vh;">
