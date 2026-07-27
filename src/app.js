@@ -176,8 +176,10 @@ export function initApp() {
   // Default 90\u00B0: telefono tenuto verticale. La calibrazione lo azzera sul reale.
   var betaHorizon = 90;
   var lastBeta = null;     // ultimo pitch grezzo, per il pulsante CALIBRA
-  var LOCK_DEG = 8;        // tolleranza di allineamento per asse
+  var LOCK_IN = 8;         // entra in allineamento sotto questa differenza
+  var LOCK_OUT = 15;       // esce solo oltre questa (isteresi anti-tremolio)
   var SCALE_DEG = 60;      // gradi visibili dal centro al bordo del mirino
+  var miraLocked = false;  // stato di allineamento corrente
 
   function onOrientation(e) {
     // --- Asse orizzontale: rotazione (bussola) ---
@@ -210,33 +212,41 @@ export function initApp() {
       if (tgtEl != null) diffEl = tgtEl - pointElev; // >0 = aereo piu in alto -> alza
     }
 
-    // --- Posiziona il bersaglio nel mirino 2D ---
     var target = document.getElementById('miraTarget');
     var status = document.getElementById('miraStatus');
     var locked = document.getElementById('miraLocked');
-    var clamp = function (v) { return Math.max(-45, Math.min(45, v / SCALE_DEG * 45)); };
-    target.style.left = (50 + clamp(diffAz)) + '%';
-    target.style.top = (hasPitch ? (50 - clamp(diffEl)) : 50) + '%';
-
-    // --- Stato testuale + lock a due assi ---
     var adA = Math.abs(diffAz);
     var adE = hasPitch ? Math.abs(diffEl) : 0;
-    var okA = adA < LOCK_DEG, okE = !hasPitch || adE < LOCK_DEG;
-    if (okA && okE) {
-      status.textContent = '\u2708 ALLINEATO \u2014 GUARDA L\u00C0!';
-      locked.style.display = 'block';
+
+    // Lock con isteresi: entra sotto LOCK_IN, esce solo oltre LOCK_OUT.
+    // Cosi sul bordo della soglia non alterna piu tra allineato e non.
+    var maxDiff = Math.max(adA, adE);
+    if (!miraLocked && maxDiff < LOCK_IN) miraLocked = true;
+    else if (miraLocked && maxDiff > LOCK_OUT) miraLocked = false;
+
+    if (miraLocked) {
+      // Fermo al centro: niente inseguimento del micro-rumore dei sensori
+      target.style.left = '50%';
+      target.style.top = '50%';
+      if (locked.style.display !== 'block') {
+        status.textContent = '\u2708 ALLINEATO \u2014 GUARDA L\u00C0!';
+        locked.style.display = 'block';
+      }
     } else {
+      var clamp = function (v) { return Math.max(-45, Math.min(45, v / SCALE_DEG * 45)); };
+      target.style.left = (50 + clamp(diffAz)) + '%';
+      target.style.top = (hasPitch ? (50 - clamp(diffEl)) : 50) + '%';
       locked.style.display = 'none';
       var parts = [];
-      if (!okA) parts.push((diffAz > 0 ? 'DESTRA ' : 'SINISTRA ') + Math.round(adA) + '\u00B0');
-      if (!okE) parts.push((diffEl > 0 ? 'ALZA ' : 'ABBASSA ') + Math.round(adE) + '\u00B0');
-      status.textContent = parts.join(' \u00B7 ');
+      if (adA >= LOCK_IN) parts.push((diffAz > 0 ? 'DESTRA ' : 'SINISTRA ') + Math.round(adA) + '\u00B0');
+      if (hasPitch && adE >= LOCK_IN) parts.push((diffEl > 0 ? 'ALZA ' : 'ABBASSA ') + Math.round(adE) + '\u00B0');
+      status.textContent = parts.length ? parts.join(' \u00B7 ') : 'quasi\u2026 muovi piano';
     }
   }
   function startMira() {
     if (!selectedAc) return;
     // Reset del filtro: riparte pulito
-    smoothSin = null; smoothCos = null; smoothBeta = null;
+    smoothSin = null; smoothCos = null; smoothBeta = null; miraLocked = false;
     var overlay = document.getElementById('miraOverlay');
     var hint = document.getElementById('miraHint');
     overlay.style.display = 'block';
