@@ -1574,6 +1574,56 @@ export function initApp() {
     activateLocation(loc.id, true); // renderLocations + savePrefs inclusi
   });
 
+  // ---------- Tasto BACK: chiude le finestre invece di uscire dall'app ----------
+  // Quando qualcosa e aperto si aggiunge una tappa nella cronologia; il back
+  // la consuma chiudendo la finestra piu in alto. Con tutto chiuso, il back
+  // esce normalmente.
+  function isAnyOpen() {
+    return document.getElementById('board').classList.contains('open') ||
+      document.getElementById('settings').classList.contains('open') ||
+      document.getElementById('searchPanel').classList.contains('open') ||
+      document.getElementById('passes').classList.contains('open') ||
+      document.getElementById('sheet').classList.contains('open') ||
+      document.getElementById('miraOverlay').style.display === 'block' ||
+      document.getElementById('aboveDialog').style.display === 'block' ||
+      document.getElementById('confirmDialog').style.display === 'block';
+  }
+  function closeTopmost() {
+    // Ordine dal livello piu "in alto" al piu basso
+    if (document.getElementById('confirmDialog').style.display === 'block') { hideConfirm(); return; }
+    if (document.getElementById('aboveDialog').style.display === 'block') { hideAboveDialog(); return; }
+    if (document.getElementById('miraOverlay').style.display === 'block') { stopMira(); return; }
+    if (document.getElementById('sheet').classList.contains('full')) { closeFull(); return; }
+    closeAll(); // pannelli + scheda mini
+  }
+  var modalActive = false;   // ho una tappa "finestra" nella cronologia?
+  var suppressPop = false;   // ignora il prossimo popstate (chiusura via tap)
+  function syncHistoryModal() {
+    var open = isAnyOpen();
+    if (open && !modalActive) {
+      modalActive = true;
+      try { history.pushState({ radarModal: true }, ''); } catch (e) { modalActive = false; }
+    } else if (!open && modalActive) {
+      modalActive = false;
+      suppressPop = true;
+      try { history.back(); } catch (e) { suppressPop = false; }
+    }
+  }
+  window.addEventListener('popstate', function () {
+    if (suppressPop) { suppressPop = false; return; }
+    if (isAnyOpen()) {
+      modalActive = false;
+      closeTopmost();
+      // Se resta ancora qualcosa aperto, rimetti la tappa per il prossimo back
+      if (isAnyOpen()) {
+        modalActive = true;
+        try { history.pushState({ radarModal: true }, ''); } catch (e) { modalActive = false; }
+      }
+    }
+  });
+  // Dopo ogni click (che puo aprire/chiudere finestre) allinea la cronologia
+  document.addEventListener('click', function () { setTimeout(syncHistoryModal, 0); });
+
   // ---------- Avvio ----------
   drawRings();
   positionSweep();
