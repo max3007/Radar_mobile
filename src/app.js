@@ -256,7 +256,31 @@ export function initApp() {
         opacity: 0.4, dashArray: '2,7', interactive: false
       }).addTo(map));
     }
-    drawAirports(); // gli aeroporti seguono centro e raggio correnti
+    drawObserver();  // segno del punto di osservazione al centro
+    drawAirports();  // gli aeroporti seguono centro e raggio correnti
+  }
+
+  // Mirino radar sul punto di osservazione: puntino + ping pulsante + crocino
+  var observerMarker = null;
+  function observerIcon() {
+    return L.divIcon({
+      className: '',
+      html: '<div class="observer">' +
+        '<span class="obs-ping"></span>' +
+        '<span class="obs-cross"></span>' +
+        '<span class="obs-core"></span>' +
+        '</div>',
+      iconSize: [0, 0], iconAnchor: [0, 0]
+    });
+  }
+  function drawObserver() {
+    if (!observerMarker) {
+      observerMarker = L.marker(CENTER, {
+        icon: observerIcon(), interactive: false, keyboard: false, zIndexOffset: -200
+      }).addTo(map);
+    } else {
+      observerMarker.setLatLng(CENTER);
+    }
   }
 
   // ---------- Aeroporti nel raggio ----------

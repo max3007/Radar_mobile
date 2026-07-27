@@ -7,6 +7,7 @@ telefono, Anzio, o una postazione salvata).
 Funzionalità principali:
 
 - mappa Leaflet con anelli di distanza, sweep radar e scie degli aerei;
+- **mirino** sul punto di osservazione (puntino con ping pulsante e crocino);
 - **stili mappa** selezionabili: rilievo (default), satellite, radar scuro;
 - **aeroporti** nel raggio con sigla e nome (tap per il dettaglio);
 - scheda dettaglio volo (compagnia, tipo, quota, velocità, fase di volo,
