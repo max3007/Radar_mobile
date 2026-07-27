@@ -331,3 +331,30 @@
     @media (prefers-reduced-motion: reduce) {
       .observer .obs-ping { animation: none; opacity: 0; }
     }
+
+    /* MIRA — mirino 2D: rotazione (X) + alzata (Y) */
+    #miraBox {
+      position: relative; width: min(240px, 74vw); aspect-ratio: 1 / 1; margin: 0 auto;
+      background: rgba(6,10,14,0.72); border: 1px solid rgba(52,224,138,0.5);
+      border-radius: 14px; overflow: hidden; backdrop-filter: blur(2px);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    }
+    #miraBox .mira-axis-h { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(52,224,138,0.28); }
+    #miraBox .mira-axis-v { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(52,224,138,0.28); }
+    #miraBox .mira-lockzone {
+      position: absolute; left: 50%; top: 50%; width: 44px; height: 44px;
+      margin: -22px 0 0 -22px; border: 1px dashed var(--phosphor); border-radius: 50%; opacity: 0.6;
+    }
+    #miraTarget {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      transition: left 0.12s linear, top 0.12s linear;
+      font-size: 30px; color: var(--amber); text-shadow: 0 0 10px rgba(255,180,84,0.85);
+    }
+    #miraLocked {
+      display: none; position: absolute; inset: 0; border-radius: 14px;
+      border: 2px solid var(--phosphor); box-shadow: 0 0 20px rgba(52,224,138,0.8) inset;
+      animation: blink 1s infinite;
+    }
+    #miraBox .mira-lbl {
+      position: absolute; font-size: 8px; letter-spacing: 1px; color: var(--muted); font-family: var(--mono);
+    }

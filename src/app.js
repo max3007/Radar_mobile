@@ -160,22 +160,31 @@ export function initApp() {
     if (!selectedAc || selectedAc.lat == null) return null;
     return bearingFromCenter(CENTER, selectedAc.lat, selectedAc.lon);
   }
-  function updateMiraStatic() {
-    if (!selectedAc || selectedAc.lat == null) return;
-    var elev = elevationAngle(CENTER, selectedAc.lat, selectedAc.lon, selectedAc.alt_baro);
-    document.getElementById('miraElev').textContent = elev + '\u00B0';
+  // Elevazione dell'aereo selezionato (gradi sopra l'orizzonte)
+  function miraTargetElevation() {
+    if (!selectedAc || selectedAc.lat == null) return null;
+    return elevationAngle(CENTER, selectedAc.lat, selectedAc.lon, selectedAc.alt_baro);
   }
-  // Smoothing circolare: media esponenziale su seno/coseno (gestisce il salto 359->0)
-  var smoothSin = null, smoothCos = null;
-  var lastShownDiff = null;
-  var SMOOTH = 0.15;      // 0..1: piu basso = piu stabile ma piu lento
-  var DEADZONE = 2.5;     // gradi: sotto questa variazione non muove nulla
+  function updateMiraStatic() {
+    var elev = miraTargetElevation();
+    document.getElementById('miraElev').textContent = elev == null ? '--' : elev + '\u00B0';
+  }
+  // Smoothing: componenti circolari per l'azimut (salto 359->0) + EMA per il pitch
+  var smoothSin = null, smoothCos = null, smoothBeta = null;
+  var SMOOTH = 0.15;       // 0..1: piu basso = piu stabile ma piu lento
+  // Riferimento di pitch che corrisponde all'orizzonte (0\u00B0 elevazione).
+  // Default 90\u00B0: telefono tenuto verticale. La calibrazione lo azzera sul reale.
+  var betaHorizon = 90;
+  var lastBeta = null;     // ultimo pitch grezzo, per il pulsante CALIBRA
+  var LOCK_DEG = 8;        // tolleranza di allineamento per asse
+  var SCALE_DEG = 60;      // gradi visibili dal centro al bordo del mirino
+
   function onOrientation(e) {
+    // --- Asse orizzontale: rotazione (bussola) ---
     var heading = null;
     if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
     else if (e.alpha != null) heading = 360 - e.alpha; // Android: alpha antiorario da Nord
     if (heading == null) return;
-    // Filtro passa-basso su componenti circolari
     var rad = heading * Math.PI / 180;
     if (smoothSin == null) { smoothSin = Math.sin(rad); smoothCos = Math.cos(rad); }
     else {
@@ -184,39 +193,55 @@ export function initApp() {
     }
     var smoothed = (Math.atan2(smoothSin, smoothCos) * 180 / Math.PI + 360) % 360;
 
-    var target = miraTargetBearing();
-    if (target == null) return;
-    var diff = ((target - smoothed + 540) % 360) - 180; // -180..180
+    var tgtBrg = miraTargetBearing();
+    if (tgtBrg == null) return;
+    var diffAz = ((tgtBrg - smoothed + 540) % 360) - 180; // -180..180
 
-    // Zona morta: ignora micro-variazioni
-    if (lastShownDiff != null && Math.abs(diff - lastShownDiff) < DEADZONE) return;
-    lastShownDiff = diff;
+    // --- Asse verticale: alzata (inclinazione del telefono) ---
+    var hasPitch = (e.beta != null);
+    var diffEl = null;
+    if (hasPitch) {
+      lastBeta = e.beta;
+      if (smoothBeta == null) smoothBeta = e.beta;
+      else smoothBeta = smoothBeta * (1 - SMOOTH) + e.beta * SMOOTH;
+      // Elevazione a cui punta il telefono: verticale (betaHorizon) = orizzonte
+      var pointElev = betaHorizon - smoothBeta;
+      var tgtEl = miraTargetElevation();
+      if (tgtEl != null) diffEl = tgtEl - pointElev; // >0 = aereo piu in alto -> alza
+    }
 
-    var tick = document.getElementById('miraTick');
+    // --- Posiziona il bersaglio nel mirino 2D ---
+    var target = document.getElementById('miraTarget');
     var status = document.getElementById('miraStatus');
     var locked = document.getElementById('miraLocked');
-    // La tacca scorre: centro = allineato. Scala: +-60 gradi visibili sulla barra
-    var pct = 50 + Math.max(-45, Math.min(45, diff / 60 * 45));
-    tick.style.left = pct + '%';
-    var ad = Math.abs(diff);
-    if (ad < 8) {
+    var clamp = function (v) { return Math.max(-45, Math.min(45, v / SCALE_DEG * 45)); };
+    target.style.left = (50 + clamp(diffAz)) + '%';
+    target.style.top = (hasPitch ? (50 - clamp(diffEl)) : 50) + '%';
+
+    // --- Stato testuale + lock a due assi ---
+    var adA = Math.abs(diffAz);
+    var adE = hasPitch ? Math.abs(diffEl) : 0;
+    var okA = adA < LOCK_DEG, okE = !hasPitch || adE < LOCK_DEG;
+    if (okA && okE) {
       status.textContent = '\u2708 ALLINEATO \u2014 GUARDA L\u00C0!';
       locked.style.display = 'block';
     } else {
       locked.style.display = 'none';
-      var offscale = ad > 60 ? ' (fuori scala)' : '';
-      status.textContent = (diff > 0 ? 'RUOTA A DESTRA ' : 'RUOTA A SINISTRA ') + Math.round(ad) + '\u00B0' + offscale;
+      var parts = [];
+      if (!okA) parts.push((diffAz > 0 ? 'DESTRA ' : 'SINISTRA ') + Math.round(adA) + '\u00B0');
+      if (!okE) parts.push((diffEl > 0 ? 'ALZA ' : 'ABBASSA ') + Math.round(adE) + '\u00B0');
+      status.textContent = parts.join(' \u00B7 ');
     }
   }
   function startMira() {
     if (!selectedAc) return;
     // Reset del filtro: riparte pulito
-    smoothSin = null; smoothCos = null; lastShownDiff = null;
+    smoothSin = null; smoothCos = null; smoothBeta = null;
     var overlay = document.getElementById('miraOverlay');
     var hint = document.getElementById('miraHint');
     overlay.style.display = 'block';
     updateMiraStatic();
-    document.getElementById('miraStatus').textContent = 'RUOTA IL TELEFONO\u2026';
+    document.getElementById('miraStatus').textContent = 'MUOVI IL TELEFONO\u2026';
     function attach() {
       miraActive = true;
       miraHandler = onOrientation;
@@ -245,6 +270,17 @@ export function initApp() {
       miraHandler = null;
     }
   }
+  // Calibrazione orizzonte: l'inclinazione attuale del telefono diventa lo 0°
+  // di elevazione. Da usare tenendo il telefono verticale puntato all'orizzonte.
+  document.getElementById('miraCalib').addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (lastBeta == null) {
+      document.getElementById('miraHint').textContent = 'Muovi prima il telefono per attivare i sensori';
+      return;
+    }
+    betaHorizon = lastBeta;
+    document.getElementById('miraHint').textContent = 'Orizzonte calibrato ✓';
+  });
 
   function drawRings() {
     rings.forEach(function (r) { map.removeLayer(r); });

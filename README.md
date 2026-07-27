@@ -13,8 +13,9 @@ Funzionalità principali:
 - scheda dettaglio volo (compagnia, tipo, quota, velocità, fase di volo,
   rotta origine→destinazione, foto dell'aereo, dati tecnici); le rotte
   d'archivio incoerenti con la posizione reale vengono nascoste;
-- bussola **MIRA**: ruota il telefono finché non punti verso l'aereo
-  selezionato;
+- **MIRA**: mirino a due assi che ti guida a puntare il telefono verso
+  l'aereo selezionato, sia in rotazione (bussola) sia in alzata
+  (inclinazione), con calibrazione dell'orizzonte;
 - **SOPRA DI TE**: salta all'aereo più vicino, con conferma se è troppo
   basso sull'orizzonte per essere visto;
 - ricerca tra gli aerei nel raggio e ricerca mondiale per numero di volo;

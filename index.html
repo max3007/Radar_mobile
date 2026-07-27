@@ -53,24 +53,30 @@
     </div>
   </div>
 
-  <!-- Overlay bussola MIRA: barra orizzonte, live con la rotazione del telefono -->
+  <!-- Overlay MIRA: mirino 2D (rotazione + alzata), live coi sensori del telefono -->
   <div id="miraOverlay" style="display:none;position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);z-index:1100;text-align:center;pointer-events:auto;width:min(320px,86vw);">
-    <div id="miraBar" style="position:relative;height:64px;background:rgba(6,10,14,0.75);border:1px solid rgba(52,224,138,0.5);border-radius:12px;overflow:hidden;backdrop-filter:blur(2px);box-shadow:0 4px 24px rgba(0,0,0,0.5);">
-      <!-- Riga di scala -->
-      <div style="position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(52,224,138,0.3);"></div>
-      <!-- Tacche di riferimento -->
-      <div style="position:absolute;left:25%;top:38%;bottom:38%;width:1px;background:rgba(52,224,138,0.35);"></div>
-      <div style="position:absolute;left:75%;top:38%;bottom:38%;width:1px;background:rgba(52,224,138,0.35);"></div>
-      <!-- Mirino centrale fisso (dove deve arrivare la tacca) -->
-      <div style="position:absolute;left:50%;top:12%;bottom:12%;width:2px;background:var(--phosphor);transform:translateX(-50%);box-shadow:0 0 8px rgba(52,224,138,0.8);"></div>
-      <!-- Tacca aereo: scorre orizzontalmente -->
-      <div id="miraTick" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);transition:left 0.12s linear;font-size:26px;color:var(--amber);text-shadow:0 0 10px rgba(255,180,84,0.8);">&#9992;</div>
-      <!-- Bordo acceso quando allineato -->
-      <div id="miraLocked" style="display:none;position:absolute;inset:0;border-radius:12px;border:2px solid var(--phosphor);box-shadow:0 0 20px rgba(52,224,138,0.8) inset;animation:blink 1s infinite;"></div>
+    <div id="miraBox">
+      <!-- Assi di riferimento -->
+      <div class="mira-axis-h"></div>
+      <div class="mira-axis-v"></div>
+      <!-- Zona di allineamento al centro -->
+      <div class="mira-lockzone"></div>
+      <!-- Bersaglio: si muove su X (rotazione) e Y (alzata) -->
+      <div id="miraTarget">&#9992;</div>
+      <!-- Bordo acceso quando l'aereo e inquadrato -->
+      <div id="miraLocked"></div>
+      <!-- Etichette assi -->
+      <div class="mira-lbl" style="left:6px;top:50%;transform:translateY(-50%);">SX</div>
+      <div class="mira-lbl" style="right:6px;top:50%;transform:translateY(-50%);">DX</div>
+      <div class="mira-lbl" style="top:6px;left:50%;transform:translateX(-50%);">SU</div>
+      <div class="mira-lbl" style="bottom:6px;left:50%;transform:translateX(-50%);">GIU</div>
     </div>
     <div id="miraStatus" style="margin-top:10px;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--phosphor);background:rgba(6,10,14,0.8);border-radius:8px;padding:6px 12px;display:inline-block;">--</div>
-    <div id="miraSub" style="margin-top:5px;font-size:11px;color:var(--text);background:rgba(6,10,14,0.8);border-radius:8px;padding:4px 10px;display:inline-block;">alza lo sguardo di <span id="miraElev" style="color:var(--amber);font-weight:700;">--</span></div>
-    <div id="miraHint" style="margin-top:5px;font-size:9px;color:var(--muted);background:rgba(6,10,14,0.7);border-radius:6px;padding:3px 8px;display:inline-block;"></div>
+    <div id="miraSub" style="margin-top:5px;font-size:11px;color:var(--text);background:rgba(6,10,14,0.8);border-radius:8px;padding:4px 10px;display:inline-block;">elevazione aereo <span id="miraElev" style="color:var(--amber);font-weight:700;">--</span></div>
+    <div style="margin-top:8px;">
+      <button id="miraCalib" class="chip">CALIBRA ORIZZONTE</button>
+    </div>
+    <div id="miraHint" style="margin-top:6px;font-size:9px;color:var(--muted);background:rgba(6,10,14,0.7);border-radius:6px;padding:3px 8px;display:inline-block;"></div>
   </div>
 
   <!-- Finestra SOPRA DI TE: conferma quando l'aereo piu vicino e basso sull'orizzonte -->
