@@ -16,6 +16,10 @@ Funzionalità principali:
 - **MIRA**: mirino a due assi che ti guida a puntare il telefono verso
   l'aereo selezionato, sia in rotazione (bussola) sia in alzata
   (inclinazione), con calibrazione dell'orizzonte;
+- **segui un aereo**: la campanella nella scheda attiva un avviso in-app
+  (banner + vibrazione + suono) quando quell'aereo sta per passarti vicino
+  (entro ~2 minuti). Funziona con l'app aperta; le notifiche a schermo spento
+  richiederebbero un backend e non sono attive;
 - **SOPRA DI TE**: salta all'aereo più vicino, con conferma se è troppo
   basso sull'orizzonte per essere visto;
 - **IN ARRIVO**: previsione dei prossimi passaggi ravvicinati (fino a ~40 min)

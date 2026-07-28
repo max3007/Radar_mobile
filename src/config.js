@@ -35,6 +35,9 @@ export const PASS_SCAN_NM = 250;
 // Un passaggio conta come "SORVOLO" (praticamente sopra la testa) solo entro
 // questa distanza orizzontale dal punto di osservazione.
 export const PASS_OVERHEAD_KM = 2;
+// Avviso in-app per gli aerei seguiti: scatta quando il passaggio e entro
+// questi minuti.
+export const PASS_ALERT_MIN = 2;
 
 export const API = {
   // Posizioni ADS-B in tempo reale (gratuita, senza chiave)

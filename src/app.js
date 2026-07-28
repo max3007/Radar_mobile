@@ -5,7 +5,7 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
-import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM } from './config.js';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN } from './config.js';
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
@@ -593,6 +593,7 @@ export function initApp() {
     });
   }
   function fillSheet(ac) {
+    updateFollowBtn(); // stato campanella per l'aereo corrente
     document.getElementById('shAirline').textContent = airlineName(ac.flight).toUpperCase();
     // Tipo aereo in evidenza sotto la compagnia: usa descrizione estesa se disponibile, altrimenti codice tipo
     var modelEl = document.getElementById('shModel');
@@ -702,6 +703,7 @@ export function initApp() {
     document.getElementById('board').classList.remove('open');
     document.getElementById('settings').classList.remove('open');
     updateTag(ac);
+    updateFollowBtn(); // stato campanella per l'aereo appena selezionato
     // Carica la rotta subito (serve all'etichetta per partenza->destinazione)
     var cs = (ac.flight || '').trim();
     if (cs && !(cs in routeCache)) loadRoute(ac);
@@ -1027,6 +1029,83 @@ export function initApp() {
     fetchPassScan(); // rinfresca il set ampio, poi ridisegna
   }
 
+  // ---------- Aerei seguiti + avviso in-app al sorvolo ----------
+  var followed = {};   // hex -> true: aerei da avvisare
+  var alerted = {};    // hex -> timestamp ultimo avviso (evita ripetizioni)
+  var audioCtx = null;
+
+  function isFollowed(hex) { return !!followed[hex]; }
+  function updateFollowBtn() {
+    var btn = document.getElementById('followBtn');
+    if (selectedAc && isFollowed(selectedAc.hex)) {
+      btn.classList.add('on'); btn.title = 'Avviso attivo: tocca per togliere';
+    } else {
+      btn.classList.remove('on'); btn.title = 'Avvisami quando passa vicino';
+    }
+  }
+  document.getElementById('followBtn').addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (!selectedAc) return;
+    var hex = selectedAc.hex;
+    if (followed[hex]) { delete followed[hex]; delete alerted[hex]; }
+    else {
+      followed[hex] = true;
+      // Prepara l'audio ora (gesture utente): serve per far suonare l'avviso
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+      } catch (err) { /* audio non disponibile */ }
+    }
+    updateFollowBtn();
+  });
+
+  function beep() {
+    try {
+      if (!audioCtx) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      [0, 0.28].forEach(function (t0) {
+        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.connect(g); g.connect(audioCtx.destination);
+        o.type = 'sine'; o.frequency.value = 880;
+        var t = audioCtx.currentTime + t0;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+        o.start(t); o.stop(t + 0.24);
+      });
+    } catch (e) { /* niente audio */ }
+  }
+  var alertHideTimer = null;
+  function fireAlert(ac, pass) {
+    var bar = document.getElementById('alertBar');
+    var flight = passFlightLabel(ac);
+    var mins = Math.max(0, Math.round(pass.tMin));
+    var km = pass.dMinKm < 1 ? (Math.round(pass.dMinKm * 1000) + ' m') : (pass.dMinKm.toFixed(1) + ' km');
+    bar.textContent = '✈ ' + flight + ' in arrivo · ' + (mins <= 0 ? 'ora' : 'tra ' + mins + '′') +
+      ' · ' + km + ' · guarda verso ' + compass(pass.brgAtPass);
+    bar.style.display = 'block';
+    bar.onclick = function () { bar.style.display = 'none'; pickAndClose(ac); };
+    if (navigator.vibrate) { try { navigator.vibrate([200, 100, 200]); } catch (e) {} }
+    beep();
+    if (alertHideTimer) clearTimeout(alertHideTimer);
+    alertHideTimer = setTimeout(function () { bar.style.display = 'none'; }, 10000);
+  }
+  // Controlla gli aerei seguiti: avvisa quando il passaggio e imminente
+  function checkFollowAlerts() {
+    for (var hex in followed) {
+      var ac = null;
+      for (var i = 0; i < lastAircraft.length; i++) { if (lastAircraft[i].hex === hex) { ac = lastAircraft[i]; break; } }
+      if (!ac) continue;
+      var pass = nextPass(CENTER, ac);
+      if (!pass || pass.tMin > PASS_ALERT_MIN || pass.dMinKm > passKm) continue;
+      if (landingBeforePass(CENTER, ac, pass, AIRPORTS)) continue; // atterra prima: non arriva
+      // Avvisa una sola volta per finestra di avvicinamento (ripristina dopo 10 min)
+      if (alerted[hex] && Date.now() - alerted[hex] < 10 * 60000) continue;
+      alerted[hex] = Date.now();
+      fireAlert(ac, pass);
+    }
+  }
+
   // ---------- Disegno ----------
   function drawPlanes(aircraft) {
     var seen = {};
@@ -1127,6 +1206,7 @@ export function initApp() {
       drawPlanes(lastAircraft);
       refreshBoard(); // aggiorna lista aerei + classifica se il pannello e aperto
       refreshPasses(); // aggiorna "IN ARRIVO" e proiezioni se il pannello e aperto
+      checkFollowAlerts(); // avvisa se un aereo seguito sta per passare
       if (selected) {
         var found = false;
         for (var i = 0; i < lastAircraft.length; i++) {
