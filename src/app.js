@@ -5,7 +5,7 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
-import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM } from './config.js';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM } from './config.js';
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
@@ -963,7 +963,7 @@ export function initApp() {
       var hh = ('0' + when.getHours()).slice(-2) + ':' + ('0' + when.getMinutes()).slice(-2);
       var etaBig = mins <= 0 ? 'ora' : ('tra ' + mins + '′');
       var km = p.dMinKm < 1 ? (Math.round(p.dMinKm * 1000) + ' m') : (p.dMinKm.toFixed(p.dMinKm < 10 ? 1 : 0) + ' km');
-      var overhead = (p.dMinKm < 3 || p.elevAtPass > 60);
+      var overhead = (p.dMinKm < PASS_OVERHEAD_KM);
       html += '<div class="pr" data-hex="' + ac.hex + '">' +
         '<div class="eta"><b>' + etaBig + '</b><span>' + hh + '</span></div>' +
         '<div class="info"><div class="f">' + passFlightLabel(ac) + '</div>' +

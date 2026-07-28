@@ -32,6 +32,9 @@ export const DEFAULT_MAP_STYLE = 'topo';
 export const PASS_HORIZON_MIN = 40;
 export const DEFAULT_PASS_KM = 15;
 export const PASS_SCAN_NM = 250;
+// Un passaggio conta come "SORVOLO" (praticamente sopra la testa) solo entro
+// questa distanza orizzontale dal punto di osservazione.
+export const PASS_OVERHEAD_KM = 2;
 
 export const API = {
   // Posizioni ADS-B in tempo reale (gratuita, senza chiave)
