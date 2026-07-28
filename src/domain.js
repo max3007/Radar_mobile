@@ -124,6 +124,41 @@ export function nextPass(center, ac) {
   };
 }
 
+// Falso positivo dei passaggi: un aereo in avvicinamento puo atterrare a un
+// aeroporto che si trova lungo la sua rotta PRIMA del punto di passaggio sopra
+// l'osservatore, quindi non arrivera mai a sorvolarci (es. aerei diretti a
+// Fiumicino visti da Anzio, che e sulla rotta ma oltre l'aeroporto).
+// Ritorna l'aeroporto se e probabile l'atterraggio prima del passaggio, altrimenti null.
+export function landingBeforePass(center, ac, pass, airports) {
+  if (!pass || !airports || !airports.length) return null;
+  var vr = ac.baro_rate != null ? ac.baro_rate : ac.geom_rate;
+  // Solo aerei in discesa marcata e gia bassi: quelli davvero in avvicinamento.
+  // Un aereo in crociera alta o in decollo che ci sorvola resta valido.
+  if (vr == null || vr >= -250) return null;
+  if (typeof ac.alt_baro !== 'number' || ac.alt_baro > 13000) return null;
+  var clat = center[0], clon = center[1];
+  var nmLon = 60 * Math.cos(clat * Math.PI / 180);
+  // Segmento di rotta: dall'aereo (P0) al punto di passaggio (P1), in miglia nautiche
+  var p0x = (ac.lon - clon) * nmLon, p0y = (ac.lat - clat) * 60;
+  var p1x = (pass.passLon - clon) * nmLon, p1y = (pass.passLat - clat) * 60;
+  var dx = p1x - p0x, dy = p1y - p0y;
+  var segLen2 = dx * dx + dy * dy;
+  if (segLen2 < 1e-6) return null;
+  var THRESH_NM = 6; // ~11 km dalla rotta: area terminale dell'aeroporto
+  var best = null, bestS = 2;
+  for (var i = 0; i < airports.length; i++) {
+    var a = airports[i];
+    var ax = (a.lon - clon) * nmLon, ay = (a.lat - clat) * 60;
+    var s = ((ax - p0x) * dx + (ay - p0y) * dy) / segLen2; // proiezione lungo la rotta [0..1]
+    if (s <= 0.02 || s >= 1) continue;                     // deve stare TRA aereo e passaggio
+    var projx = p0x + s * dx, projy = p0y + s * dy;
+    var perp = Math.sqrt((ax - projx) * (ax - projx) + (ay - projy) * (ay - projy));
+    if (perp > THRESH_NM) continue;
+    if (s < bestS) { bestS = s; best = a; }                // il primo aeroporto lungo la rotta
+  }
+  return best;
+}
+
 // Verifica di plausibilita della rotta d'archivio (adsbdb) rispetto alla
 // posizione e alla prua reali dell'aereo. Il database delle rotte per
 // callsign e statico e a volte stantio: se l'aereo e lontano dal corridoio

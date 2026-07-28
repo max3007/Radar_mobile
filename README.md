@@ -23,7 +23,9 @@ Funzionalità principali:
   scansione dedicata a raggio ampio (250 NM) per il massimo preaviso anche a
   mappa stretta: tabella cliccabile con minuti al passaggio, distanza,
   elevazione e direzione, soglia regolabile, proiezione sulla mappa e
-  aggiornamento live;
+  aggiornamento live. Gli aerei in avvicinamento che atterreranno a un
+  aeroporto sulla loro rotta prima di raggiungerti (es. arrivi a Fiumicino
+  visti da Anzio) vengono esclusi come falsi positivi;
 - ricerca tra gli aerei nel raggio e ricerca mondiale per numero di volo;
 - pannello **TRAFFICO** a due schede: lista degli aerei nel raggio (cliccabile,
   ordinata per distanza, con emergenze evidenziate) e classifica delle

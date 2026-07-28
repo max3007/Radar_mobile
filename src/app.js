@@ -10,7 +10,7 @@ import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
   bearingFromCenter, elevationAngle, emergencyInfo, flightPhase,
-  routeConsistent, nextPass
+  routeConsistent, nextPass, landingBeforePass
 } from './domain.js';
 import AIRPORTS from './data/airports.json';
 
@@ -909,6 +909,9 @@ export function initApp() {
       if (!pass) continue;
       if (pass.tMin > PASS_HORIZON_MIN) continue;
       if (pass.dMinKm > passKm) continue;
+      // Scarta i falsi positivi: aerei che atterrano a un aeroporto sulla
+      // rotta prima di arrivare sopra di noi (es. arrivi a Fiumicino).
+      if (landingBeforePass(CENTER, ac, pass, AIRPORTS)) continue;
       out.push({ ac: ac, pass: pass });
     }
     out.sort(function (a, b) { return a.pass.tMin - b.pass.tMin; });

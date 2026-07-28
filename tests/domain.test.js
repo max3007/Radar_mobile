@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
   bearingBetween, bearingFromCenter, elevationAngle, destPoint,
-  emergencyInfo, flightPhase, routeConsistent, nextPass
+  emergencyInfo, flightPhase, routeConsistent, nextPass, landingBeforePass
 } from '../src/domain.js';
 
 const ANZIO = [41.4479, 12.6285];
@@ -241,5 +241,46 @@ describe('nextPass (passaggio piu ravvicinato)', () => {
     expect(nextPass(ANZIO, { lat: 41.9, lon: 12.6, gs: 10, track: 180, alt_baro: 3000 })).toBeNull();
     expect(nextPass(ANZIO, { lat: 41.9, lon: 12.6, gs: null, track: 180, alt_baro: 3000 })).toBeNull();
     expect(nextPass(ANZIO, { lat: null, lon: null, gs: 400, track: 180 })).toBeNull();
+  });
+});
+
+describe('landingBeforePass (falsi positivi: atterra prima)', () => {
+  const ANZIO = [41.4479, 12.6285];
+  const FCO = { icao: 'LIRF', iata: 'FCO', name: 'Roma Fiumicino', lat: 41.8003, lon: 12.2389 };
+  const AIRPORTS = [FCO];
+
+  it('aereo a nord in discesa verso FCO (che sta tra aereo e Anzio): atterra prima', () => {
+    // aereo sopra/oltre FCO, in discesa marcata, rotta verso sud (verso FCO poi Anzio)
+    const ac = { lat: 42.05, lon: 12.20, gs: 250, track: 170, alt_baro: 7000, baro_rate: -900 };
+    const pass = nextPass(ANZIO, ac);
+    expect(pass).not.toBeNull();
+    const apt = landingBeforePass(ANZIO, ac, pass, AIRPORTS);
+    expect(apt && apt.iata).toBe('FCO');
+  });
+
+  it('stesso corridoio ma in crociera alta e livellato: sorvola davvero, non escluso', () => {
+    const ac = { lat: 42.05, lon: 12.20, gs: 450, track: 170, alt_baro: 36000, baro_rate: 0 };
+    const pass = nextPass(ANZIO, ac);
+    expect(landingBeforePass(ANZIO, ac, pass, AIRPORTS)).toBeNull();
+  });
+
+  it('aereo in decollo (in salita) sulla stessa rotta: non escluso', () => {
+    const ac = { lat: 42.05, lon: 12.20, gs: 250, track: 170, alt_baro: 6000, baro_rate: 1800 };
+    const pass = nextPass(ANZIO, ac);
+    expect(landingBeforePass(ANZIO, ac, pass, AIRPORTS)).toBeNull();
+  });
+
+  it('approccio da sud: sorvola Anzio PRIMA di FCO (aeroporto oltre il passaggio): non escluso', () => {
+    // aereo a sud di Anzio, in discesa, va a nord: passa su Anzio poi atterra a FCO (oltre)
+    const ac = { lat: 41.10, lon: 12.70, gs: 250, track: 340, alt_baro: 9000, baro_rate: -700 };
+    const pass = nextPass(ANZIO, ac);
+    expect(pass).not.toBeNull();
+    expect(landingBeforePass(ANZIO, ac, pass, AIRPORTS)).toBeNull();
+  });
+
+  it('nessun aeroporto vicino alla rotta: non escluso', () => {
+    const ac = { lat: 42.05, lon: 12.20, gs: 250, track: 170, alt_baro: 7000, baro_rate: -900 };
+    const pass = nextPass(ANZIO, ac);
+    expect(landingBeforePass(ANZIO, ac, pass, [])).toBeNull();
   });
 });
