@@ -8,7 +8,7 @@ import L from 'leaflet';
 import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN } from './config.js';
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
-  airlineName, toCallsign, fmtFlight, altColor, compass,
+  airlineName, toCallsign, fmtFlight, altColor, planeColor, altLabel, isOnGround, compass,
   bearingFromCenter, elevationAngle, emergencyInfo, flightPhase,
   routeConsistent, nextPass, landingBeforePass
 } from './domain.js';
@@ -125,7 +125,7 @@ export function initApp() {
         route = (r.orig.iata || r.orig.icao || '?') + ' \u2192 ' + (r.dest.iata || r.dest.icao || '?');
       }
     }
-    var alt = ac.alt_baro === 'ground' ? 'TERRA' : (ac.alt_baro != null ? ac.alt_baro + ' ft' : '--');
+    var alt = altLabel(ac);
     var spd = ac.gs != null ? Math.round(ac.gs) + ' kt' : '--';
     var dir = ac.track != null ? Math.round(ac.track) + '\u00B0 ' + compass(ac.track) : '';
     var comp = airlineName(ac.flight);
@@ -406,7 +406,7 @@ export function initApp() {
   }
 
   function passesFilters(ac) {
-    if (filterAirborne && ac.alt_baro === 'ground') return false;
+    if (filterAirborne && isOnGround(ac)) return false;
     if (filterAirline && airlineName(ac.flight) !== filterAirline) return false;
     return true;
   }
@@ -582,7 +582,7 @@ export function initApp() {
       if (id && markers[id] && markers[id]._ac) {
         var ac = markers[id]._ac;
         var isSel = (id === newSel);
-        var color = altColor(ac.alt_baro, isSel);
+        var color = planeColor(ac, isSel);
         var emg = !!emergencyInfo(ac);
         markers[id].setIcon(planeIcon(ac.track, color, isSel, emg));
         markerState[id] = { track: ac.track || 0, color: color, sel: isSel, emg: emg };
@@ -605,7 +605,7 @@ export function initApp() {
     // Ripiego numero volo = callsign, finche showRoute non fornisce il numero IATA
     var miniF = document.getElementById('miniFlight');
     if (!miniF.dataset.iata) miniF.textContent = (ac.flight || '').trim() || ac.hex.toUpperCase();
-    document.getElementById('miniAlt').textContent = ac.alt_baro === 'ground' ? 'A terra' : (ac.alt_baro != null ? ac.alt_baro + ' ft' : '--');
+    document.getElementById('miniAlt').textContent = altLabel(ac);
     document.getElementById('miniSpd').textContent = ac.gs != null ? Math.round(ac.gs) + ' kt' : '--';
     // Tipo aereo nella riga mini
     document.getElementById('miniModel').textContent = ac.desc || ac.t || 'Tipo sconosciuto';
@@ -618,7 +618,7 @@ export function initApp() {
     }
     // Fase di volo nella riga mini
     document.getElementById('miniPhase').textContent = flightPhase(ac) || '';
-    document.getElementById('shAlt').textContent = ac.alt_baro === 'ground' ? 'TERRA' : (ac.alt_baro != null ? ac.alt_baro + ' ft' : '--');
+    document.getElementById('shAlt').textContent = altLabel(ac);
     document.getElementById('shSpd').textContent = ac.gs != null ? Math.round(ac.gs) + ' kt' : '--';
     document.getElementById('shTrk').textContent = ac.track != null ? Math.round(ac.track) + '\u00B0 ' + compass(ac.track) : '--';
     // Variometro: salita/discesa in ft/min
@@ -788,7 +788,7 @@ export function initApp() {
     for (var i = 0; i < list.length; i++) {
       var a = list[i].ac, km = list[i].d / 1000;
       var flight = (a.flight || '').trim() || a.hex.toUpperCase();
-      var alt = a.alt_baro === 'ground' ? 'a terra' : (a.alt_baro != null ? a.alt_baro + ' ft' : '--');
+      var alt = altLabel(a, true) || '--';
       var spd = a.gs != null ? Math.round(a.gs) + ' kt' : '--';
       var emg = !!emergencyInfo(a);
       var phase = flightPhase(a) || '';
@@ -1122,7 +1122,7 @@ export function initApp() {
       if (typeof ac.alt_baro === 'number' && ac.alt_baro > maxAlt) maxAlt = ac.alt_baro;
 
       var isSel = (id === selected);
-      var color = altColor(ac.alt_baro, isSel);
+      var color = planeColor(ac, isSel);
 
       // Scia: aggiorna i punti; ricrea la linea solo se serve
       if (!trails[id]) trails[id] = { pts: [], line: null, color: color };
@@ -1354,7 +1354,7 @@ export function initApp() {
     for (var j = 0; j < hits.length; j++) {
       var a = hits[j];
       var km = map.distance([a.lat, a.lon], CENTER) / 1000;
-      var alt = a.alt_baro === 'ground' ? 'a terra' : (a.alt_baro != null ? a.alt_baro + ' ft' : '');
+      var alt = altLabel(a, true);
       html += '<div class="sr" data-hex="' + a.hex + '">' +
         '<div class="f">' + ((a.flight || '').trim() || a.hex.toUpperCase()) + '</div>' +
         '<div class="d">' + airlineName(a.flight) + '<small>' + (a.t || '') + ' \u00B7 ' + alt + '</small></div>' +

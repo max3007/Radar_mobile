@@ -33,6 +33,21 @@ export function fmtFlight(s) {
   return m ? m[1] + ' ' + m[2] : s;
 }
 
+// Aereo davvero a terra: il flag ADS-B 'ground' e attendibile solo a bassa
+// velocita. A 200 kt l'aereo e in volo (basso o dato errato), non a terra.
+var GROUND_MAX_KT = 80;
+export function isOnGround(ac) {
+  if (!ac || ac.alt_baro !== 'ground') return false;
+  return ac.gs == null || ac.gs < GROUND_MAX_KT;
+}
+
+// Etichetta di quota, consapevole dei falsi "ground"
+export function altLabel(ac, short) {
+  if (isOnGround(ac)) return short ? 'a terra' : 'TERRA';
+  if (ac.alt_baro === 'ground') return 'bassa quota'; // in volo ma quota non riportata
+  return ac.alt_baro != null ? ac.alt_baro + ' ft' : (short ? '' : '--');
+}
+
 // Colore per fascia di quota
 export function altColor(alt, isSel) {
   if (isSel) return '#f2fff8';
@@ -41,6 +56,12 @@ export function altColor(alt, isSel) {
   if (alt < 10000) return '#ffb454';
   if (alt < 25000) return '#34e08a';
   return '#6fd3ff';
+}
+// Colore per un aereo, gestendo i falsi "ground" (in volo basso -> ambra)
+export function planeColor(ac, isSel) {
+  if (isOnGround(ac)) return altColor('ground', isSel);
+  if (ac.alt_baro === 'ground') return altColor(500, isSel); // in volo basso
+  return altColor(ac.alt_baro, isSel);
 }
 
 // Direzione bussola in italiano
@@ -93,7 +114,7 @@ export function destPoint(lat, lon, brg, distM) {
 export function nextPass(center, ac) {
   if (!ac || ac.lat == null || ac.lon == null) return null;
   if (ac.gs == null || ac.track == null) return null;
-  if (ac.alt_baro === 'ground') return null;
+  if (isOnGround(ac)) return null;
   var gs = ac.gs;
   if (gs < 50) return null; // fermo o quasi: nessuna traiettoria utile
   var clat = center[0], clon = center[1];
@@ -218,7 +239,7 @@ export function emergencyInfo(ac) {
 // Fase di volo dedotta da modi di navigazione, vario e quota
 export function flightPhase(ac) {
   var modes = ac.nav_modes || [];
-  if (ac.alt_baro === 'ground') return 'A TERRA';
+  if (isOnGround(ac)) return 'A TERRA';
   if (modes.indexOf('approach') !== -1) return 'IN AVVICINAMENTO';
   var vr = ac.baro_rate != null ? ac.baro_rate : ac.geom_rate;
   if (vr != null && vr > 300) {
@@ -231,5 +252,7 @@ export function flightPhase(ac) {
     return 'IN DISCESA';
   }
   if (typeof ac.alt_baro === 'number' && ac.alt_baro > 24000) return 'IN CROCIERA';
+  // Flag 'ground' ma in volo (velocita alta): e basso, tipicamente in manovra
+  if (ac.alt_baro === 'ground') return 'IN AVVICINAMENTO';
   return 'IN VOLO LIVELLATO';
 }

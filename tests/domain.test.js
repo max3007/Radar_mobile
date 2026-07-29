@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
   bearingBetween, bearingFromCenter, elevationAngle, destPoint,
-  emergencyInfo, flightPhase, routeConsistent, nextPass, landingBeforePass
+  emergencyInfo, flightPhase, routeConsistent, nextPass, landingBeforePass,
+  isOnGround, altLabel
 } from '../src/domain.js';
 
 const ANZIO = [41.4479, 12.6285];
@@ -236,11 +237,17 @@ describe('nextPass (passaggio piu ravvicinato)', () => {
     expect(r.dMinKm).toBeLessThan(32);
   });
 
-  it('aereo a terra, fermo o senza dati: null', () => {
-    expect(nextPass(ANZIO, { lat: 41.9, lon: 12.6, gs: 400, track: 180, alt_baro: 'ground' })).toBeNull();
+  it('aereo a terra (rullaggio), fermo o senza dati: null', () => {
+    expect(nextPass(ANZIO, { lat: 41.9, lon: 12.6, gs: 15, track: 180, alt_baro: 'ground' })).toBeNull();
     expect(nextPass(ANZIO, { lat: 41.9, lon: 12.6, gs: 10, track: 180, alt_baro: 3000 })).toBeNull();
     expect(nextPass(ANZIO, { lat: 41.9, lon: 12.6, gs: null, track: 180, alt_baro: 3000 })).toBeNull();
     expect(nextPass(ANZIO, { lat: null, lon: null, gs: 400, track: 180 })).toBeNull();
+  });
+
+  it('flag ground ma in volo veloce: NON scartato (viene proiettato)', () => {
+    // caso EC4168: alt_baro 'ground' ma 200 kt in avvicinamento
+    const ac = { lat: ANZIO[0] + 0.4, lon: ANZIO[1], gs: 200, track: 180, alt_baro: 'ground' };
+    expect(nextPass(ANZIO, ac)).not.toBeNull();
   });
 });
 
@@ -282,5 +289,41 @@ describe('landingBeforePass (falsi positivi: atterra prima)', () => {
     const ac = { lat: 42.05, lon: 12.20, gs: 250, track: 170, alt_baro: 7000, baro_rate: -900 };
     const pass = nextPass(ANZIO, ac);
     expect(landingBeforePass(ANZIO, ac, pass, [])).toBeNull();
+  });
+});
+
+describe('isOnGround (falsi "ground" ad alta velocità)', () => {
+  it('flag ground a velocità alta (in volo) -> non a terra', () => {
+    expect(isOnGround({ alt_baro: 'ground', gs: 200 })).toBe(false); // caso EC4168
+    expect(isOnGround({ alt_baro: 'ground', gs: 120 })).toBe(false);
+  });
+  it('flag ground a bassa velocità (rullaggio) -> a terra', () => {
+    expect(isOnGround({ alt_baro: 'ground', gs: 15 })).toBe(true);
+    expect(isOnGround({ alt_baro: 'ground', gs: null })).toBe(true);
+  });
+  it('quota numerica -> mai a terra', () => {
+    expect(isOnGround({ alt_baro: 5000, gs: 10 })).toBe(false);
+  });
+});
+
+describe('altLabel', () => {
+  it('a terra vero -> TERRA / a terra', () => {
+    expect(altLabel({ alt_baro: 'ground', gs: 10 })).toBe('TERRA');
+    expect(altLabel({ alt_baro: 'ground', gs: 10 }, true)).toBe('a terra');
+  });
+  it('ground ma in volo veloce -> bassa quota', () => {
+    expect(altLabel({ alt_baro: 'ground', gs: 200 })).toBe('bassa quota');
+  });
+  it('quota numerica -> valore in ft', () => {
+    expect(altLabel({ alt_baro: 22000, gs: 400 })).toBe('22000 ft');
+  });
+});
+
+describe('flightPhase con falsi ground', () => {
+  it('ground a 200 kt -> non "A TERRA" ma in avvicinamento', () => {
+    expect(flightPhase({ alt_baro: 'ground', gs: 200 })).toBe('IN AVVICINAMENTO');
+  });
+  it('ground fermo -> A TERRA', () => {
+    expect(flightPhase({ alt_baro: 'ground', gs: 5 })).toBe('A TERRA');
   });
 });

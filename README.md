@@ -10,6 +10,9 @@ Funzionalità principali:
 - **mirino** sul punto di osservazione (puntino con ping pulsante e crocino);
 - **stili mappa** selezionabili: rilievo (default), satellite, radar scuro;
 - **aeroporti** nel raggio con sigla e nome (tap per il dettaglio);
+- riconoscimento dei falsi "a terra": il flag ADS-B `ground` a velocità di
+  volo (es. un aereo a 200 kt in avvicinamento) viene mostrato come in volo a
+  bassa quota, non a terra;
 - scheda dettaglio volo (compagnia, tipo, quota, velocità, fase di volo,
   rotta origine→destinazione, foto dell'aereo, dati tecnici); le rotte
   d'archivio incoerenti con la posizione reale vengono nascoste;
