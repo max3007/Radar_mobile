@@ -98,13 +98,14 @@ icona "espandi" sulla finestrella · **overlay incendi** EFFIS.
 
 ## DA VERIFICARE SUL CAMPO (non testabile in sandbox)
 
-1. **Overlay incendi (EFFIS)** — priorità. Endpoint/layer in `src/config.js`
-   (`FIRE_WMS`: `ies-ows.jrc.ec.europa.eu/effis`, layer `modis.hs`) sono quelli
-   STORICI e non confermati (EFFIS è migrato a Copernicus). Se attivando il
-   toggle non appaiono incendi: verificare via GetCapabilities il nuovo
-   endpoint/nome layer e aggiornare `FIRE_WMS`. Endpoint moderno probabile:
-   `https://maps.effis.emergency.copernicus.eu/effis`. Alternativa: NASA FIRMS
-   WMS (richiede MAP_KEY gratuita, forse proxy per CORS).
+1. ~~Overlay incendi (EFFIS)~~ — RISOLTO 2026-08-09: `ies-ows.jrc.ec.europa.eu`
+   era l'host storico ormai dismesso. Verificato via GetCapabilities che il
+   servizio è su `https://maps.effis.emergency.copernicus.eu/effis` (MapServer)
+   e che il layer `modis.hs` esiste ancora con lo stesso nome (insieme a
+   `viirs.hs`, `noaa.hs`, `all.hs` = tutte le fonti insieme). `FIRE_WMS`
+   aggiornato in `src/config.js`. Resta da confermare sul campo che le tile
+   effettivamente si carichino (nel sandbox il dominio è bloccato dal proxy
+   di rete, quindi non renderizzabile qui).
 2. **MIRA / GPS / bussola**: sensori reali del telefono (iOS chiede permesso).
    Verificare che l'asse verticale non sia invertito su alcuni device.
 3. **Notifiche follow**: avviso in-app funziona solo con app aperta in
