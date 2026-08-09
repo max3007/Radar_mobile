@@ -435,3 +435,6 @@
     #followBtn.on { border-color: var(--phosphor); color: var(--phosphor); background: rgba(52,224,138,0.12); }
     /* In scheda mini closeFull e nascosto, la campanella si sposta in alto a destra */
     #sheet:not(.full) #followBtn { top: 10px; right: 14px; }
+
+    /* FAB testuali multi-riga (SOPRA DI TE / IN ARRIVO) via \n dai testi tradotti */
+    .fab.small { white-space: pre-line; }

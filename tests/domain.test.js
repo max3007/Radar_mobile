@@ -1,10 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import {
   airlineName, toCallsign, fmtFlight, altColor, compass,
   bearingBetween, bearingFromCenter, elevationAngle, destPoint,
   emergencyInfo, flightPhase, routeConsistent, nextPass, landingBeforePass,
   isOnGround, altLabel
 } from '../src/domain.js';
+import { setLang } from '../src/i18n.js';
+
+// I test asseriscono le stringhe italiane: fissa la lingua
+beforeAll(() => setLang('it'));
 
 const ANZIO = [41.4479, 12.6285];
 

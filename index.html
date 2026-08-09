@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="it" id="htmlRoot">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -19,12 +19,12 @@
       <div id="hudFilters" style="font-size:8px;color:var(--muted);letter-spacing:1px;margin-top:1px;"></div>
     </div>
     <div class="stats">
-      <div class="stat"><b id="stCount">--</b><span>CONTATTI</span></div>
-      <div class="stat"><b id="stFast">--</b><span>MAX KT</span></div>
-      <div class="stat"><b id="stHigh">--</b><span>MAX FT</span></div>
+      <div class="stat"><b id="stCount">--</b><span data-i18n="hud.contacts">CONTATTI</span></div>
+      <div class="stat"><b id="stFast">--</b><span data-i18n="hud.maxkt">MAX KT</span></div>
+      <div class="stat"><b id="stHigh">--</b><span data-i18n="hud.maxft">MAX FT</span></div>
     </div>
   </div>
-  <div id="errBar">SEGNALE PERSO &#183; RIPROVO&#8230;</div>
+  <div id="errBar" data-i18n="hud.signalLost">SEGNALE PERSO &#183; RIPROVO&#8230;</div>
   <div id="alertBar"></div>
 
   <div id="map"></div>
@@ -33,22 +33,22 @@
   <!-- Pannello ricerca avanzata -->
   <div id="searchPanel" class="bsheet" style="z-index:1296;max-height:70vh;">
     <div class="grab"></div>
-    <h2>CERCA AEREO</h2>
-    <input id="flightSearch" type="text" placeholder="Volo, compagnia, tipo, registrazione&#8230;" autocomplete="off"
+    <h2 data-i18n="panel.searchTitle">CERCA AEREO</h2>
+    <input id="flightSearch" type="text" data-i18n-ph="search.ph" placeholder="Volo, compagnia, tipo, registrazione&#8230;" autocomplete="off"
       style="width:100%;box-sizing:border-box;padding:10px;border-radius:8px;font-family:var(--mono);font-size:14px;background:var(--bg);color:var(--text);border:1px solid var(--phosphor-dim);text-transform:uppercase;">
     <div id="quickChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
-      <button class="chip" data-q="vicino">Pi&#249; vicino</button>
-      <button class="chip" data-q="alto">Pi&#249; alto</button>
-      <button class="chip" data-q="veloce">Pi&#249; veloce</button>
-      <button class="chip" data-q="atterraggio">In atterraggio</button>
-      <button class="chip" data-q="decollo">In decollo</button>
+      <button class="chip" data-q="vicino" data-i18n="chip.nearest">Pi&#249; vicino</button>
+      <button class="chip" data-q="alto" data-i18n="chip.highest">Pi&#249; alto</button>
+      <button class="chip" data-q="veloce" data-i18n="chip.fastest">Pi&#249; veloce</button>
+      <button class="chip" data-q="atterraggio" data-i18n="chip.landing">In atterraggio</button>
+      <button class="chip" data-q="decollo" data-i18n="chip.takeoff">In decollo</button>
     </div>
     <div id="searchResults" style="margin-top:10px;"></div>
     <div id="searchNote" style="font-size:10px;color:var(--muted);margin-top:6px;letter-spacing:0.5px;"></div>
-    <button id="flightSearchBtn" style="margin-top:10px;width:100%;padding:9px;border:1px solid var(--phosphor-dim);border-radius:8px;background:rgba(52,224,138,0.1);color:var(--phosphor);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;">CERCA NEL MONDO (numero volo)</button>
-    <label style="display:block;font-size:10px;color:var(--muted);letter-spacing:1px;margin:14px 0 6px;">FILTRA PER COMPAGNIA (si applica subito)</label>
+    <button id="flightSearchBtn" style="margin-top:10px;width:100%;padding:9px;border:1px solid var(--phosphor-dim);border-radius:8px;background:rgba(52,224,138,0.1);color:var(--phosphor);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;" data-i18n="search.world">CERCA NEL MONDO (numero volo)</button>
+    <label style="display:block;font-size:10px;color:var(--muted);letter-spacing:1px;margin:14px 0 6px;" data-i18n="search.filterAirline">FILTRA PER COMPAGNIA (si applica subito)</label>
     <div style="position:relative;">
-      <input type="text" id="airlineSearch" placeholder="Tutte (digita per cercare)" autocomplete="off"
+      <input type="text" id="airlineSearch" data-i18n-ph="search.airlinePh" placeholder="Tutte (digita per cercare)" autocomplete="off"
         style="width:100%;box-sizing:border-box;padding:8px;border-radius:8px;font-family:var(--mono);font-size:13px;background:var(--bg);color:var(--text);border:1px solid var(--line);">
       <div id="airlineList" style="display:none;position:absolute;left:0;right:0;bottom:100%;margin-bottom:4px;background:var(--bg);border:1px solid var(--phosphor-dim);border-radius:8px;max-height:160px;overflow-y:auto;z-index:1400;"></div>
     </div>
@@ -67,16 +67,16 @@
       <!-- Bordo acceso quando l'aereo e inquadrato -->
       <div id="miraLocked"></div>
       <!-- Etichette assi -->
-      <div class="mira-lbl" style="left:6px;top:50%;transform:translateY(-50%);">SX</div>
-      <div class="mira-lbl" style="right:6px;top:50%;transform:translateY(-50%);">DX</div>
-      <div class="mira-lbl" style="top:6px;left:50%;transform:translateX(-50%);">SU</div>
-      <div class="mira-lbl" style="bottom:6px;left:50%;transform:translateX(-50%);">GIU</div>
+      <div class="mira-lbl" data-i18n="miralbl.left" style="left:6px;top:50%;transform:translateY(-50%);">SX</div>
+      <div class="mira-lbl" data-i18n="miralbl.right" style="right:6px;top:50%;transform:translateY(-50%);">DX</div>
+      <div class="mira-lbl" data-i18n="miralbl.up" style="top:6px;left:50%;transform:translateX(-50%);">SU</div>
+      <div class="mira-lbl" data-i18n="miralbl.down" style="bottom:6px;left:50%;transform:translateX(-50%);">GIU</div>
     </div>
     <div id="miraStatus" style="margin-top:10px;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--phosphor);background:rgba(6,10,14,0.8);border-radius:8px;padding:6px 12px;display:inline-block;white-space:nowrap;">--</div>
     <div style="height:6px;"></div>
     <div id="miraSub" style="font-size:12px;font-weight:700;color:var(--amber);background:rgba(6,10,14,0.8);border-radius:8px;padding:5px 12px;display:inline-block;white-space:nowrap;">--</div>
     <div style="margin-top:8px;">
-      <button id="miraCalib" class="chip">CALIBRA ORIZZONTE</button>
+      <button id="miraCalib" class="chip" data-i18n="mira.calibBtn">CALIBRA ORIZZONTE</button>
     </div>
     <div id="miraHint" style="margin-top:6px;font-size:9px;color:var(--muted);background:rgba(6,10,14,0.7);border-radius:6px;padding:3px 8px;display:inline-block;"></div>
   </div>
@@ -86,8 +86,8 @@
     <div id="aboveTitle" class="dialogTitle">--</div>
     <div id="aboveInfo" class="dialogInfo">--</div>
     <div class="dialogBtns">
-      <button id="aboveGo" class="chip">MOSTRA COMUNQUE</button>
-      <button id="aboveCancel" class="chip">ANNULLA</button>
+      <button id="aboveGo" class="chip" data-i18n="above.showAnyway">MOSTRA COMUNQUE</button>
+      <button id="aboveCancel" class="chip" data-i18n="dlg.cancel">ANNULLA</button>
     </div>
   </div>
 
@@ -95,8 +95,8 @@
   <div id="confirmDialog" class="dialog" style="display:none;">
     <div id="confirmTitle" class="dialogTitle">--</div>
     <div class="dialogBtns">
-      <button id="confirmYes" class="chip" style="border-color:#dc2828;color:#ff6b5a;">ELIMINA</button>
-      <button id="confirmNo" class="chip">ANNULLA</button>
+      <button id="confirmYes" class="chip" style="border-color:#dc2828;color:#ff6b5a;" data-i18n="dlg.delete">ELIMINA</button>
+      <button id="confirmNo" class="chip" data-i18n="dlg.cancel">ANNULLA</button>
     </div>
   </div>
 
@@ -105,17 +105,19 @@
     <button class="fab" id="btnSettings" title="Impostazioni" aria-label="Impostazioni">&#9881;</button>
     <button class="fab" id="btnBoard" title="Classifica compagnie" aria-label="Classifica compagnie">&#9776;</button>
     <button class="fab" id="btnSearch" title="Cerca aereo" aria-label="Cerca aereo">&#128269;</button>
-    <button class="fab small" id="btnAbove" title="Sopra di te" aria-label="Aereo piu vicino">SOPRA<br>DI TE</button>
-    <button class="fab small" id="btnPasses" title="Prossimi passaggi previsti" aria-label="Aerei in arrivo">IN<br>ARRIVO</button>
-    <button class="fab small" id="btnMira" title="Punta verso l'aereo selezionato" aria-label="Bussola verso l'aereo">MIRA</button>
+    <button class="fab small" id="btnAbove" data-i18n="fab.above" title="Sopra di te" aria-label="Aereo piu vicino">SOPRA
+DI TE</button>
+    <button class="fab small" id="btnPasses" data-i18n="fab.arriving" title="Prossimi passaggi previsti" aria-label="Aerei in arrivo">IN
+ARRIVO</button>
+    <button class="fab small" id="btnMira" data-i18n="fab.mira" title="Punta verso l'aereo selezionato" aria-label="Bussola verso l'aereo">MIRA</button>
     <button class="fab" id="btnCenter" title="Centra" aria-label="Centra la mappa">&#8853;</button>
   </div>
 
   <div id="board" class="bsheet">
     <div class="grab"></div>
     <div class="tabs">
-      <button class="tab active" data-tab="planes">AEREI</button>
-      <button class="tab" data-tab="airlines">COMPAGNIE</button>
+      <button class="tab active" data-tab="planes" data-i18n="tab.planes">AEREI</button>
+      <button class="tab" data-tab="airlines" data-i18n="tab.airlines">COMPAGNIE</button>
     </div>
     <div id="tabPlanes">
       <div id="planeCount"></div>
@@ -128,49 +130,54 @@
 
   <div id="passes" class="bsheet" style="z-index:1292;max-height:66vh;">
     <div class="grab"></div>
-    <h2>IN ARRIVO &#183; PROSSIMI PASSAGGI</h2>
+    <h2 data-i18n="panel.arrivingTitle">IN ARRIVO &#183; PROSSIMI PASSAGGI</h2>
     <div id="passList"></div>
-    <div style="font-size:9px;color:var(--muted);margin-top:8px;letter-spacing:0.5px;">Scansione fino a 250 NM &#183; stima su rotta e velocit&#224; attuali &#183; aggiornata ogni 12 s</div>
+    <div data-i18n="arr.note" style="font-size:9px;color:var(--muted);margin-top:8px;letter-spacing:0.5px;">Scansione fino a 250 NM &#183; stima su rotta e velocit&#224; attuali &#183; aggiornata ogni 12 s</div>
   </div>
 
   <div id="settings" class="bsheet">
     <div class="grab"></div>
-    <h2>IMPOSTAZIONI</h2>
-    <label style="margin-top:0;">POSTAZIONE DI OSSERVAZIONE (si applica subito)</label>
+    <h2 data-i18n="panel.settings">IMPOSTAZIONI</h2>
+    <label style="margin-top:0;" data-i18n="set.location">POSTAZIONE DI OSSERVAZIONE (si applica subito)</label>
     <div id="locList" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
     <div style="display:flex;gap:6px;margin-top:10px;">
-      <input type="text" id="locSearch" placeholder="Cerca un luogo (città, indirizzo…)" autocomplete="off"
+      <input type="text" id="locSearch" data-i18n-ph="set.searchPlacePh" placeholder="Cerca un luogo (città, indirizzo…)" autocomplete="off"
         style="flex:1;min-width:0;padding:8px;border-radius:8px;font-family:var(--mono);font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--line);">
-      <button id="locSearchBtn" class="chip" style="flex-shrink:0;">CERCA</button>
+      <button id="locSearchBtn" class="chip" style="flex-shrink:0;" data-i18n="set.search">CERCA</button>
     </div>
     <div id="locSearchResults"></div>
     <div id="locSearchNote" style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.5px;"></div>
     <div style="display:flex;gap:6px;margin-top:8px;">
-      <input type="text" id="locName" placeholder="Nome postazione" autocomplete="off" maxlength="20"
+      <input type="text" id="locName" data-i18n-ph="set.locNamePh" placeholder="Nome postazione" autocomplete="off" maxlength="20"
         style="flex:1;min-width:0;padding:8px;border-radius:8px;font-family:var(--mono);font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--line);">
-      <button id="locSave" class="chip" style="flex-shrink:0;">+ SALVA QUI</button>
+      <button id="locSave" class="chip" style="flex-shrink:0;" data-i18n="set.saveHere">+ SALVA QUI</button>
     </div>
-    <div style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.5px;">Cerca un luogo (oppure sposta la mappa), poi "+ SALVA QUI" memorizza il centro come postazione</div>
-    <label>RAGGIO DI RICERCA: <span id="radiusVal">100</span> NM</label>
+    <div data-i18n="set.locHint" style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.5px;">Cerca un luogo (oppure sposta la mappa), poi "+ SALVA QUI" memorizza il centro come postazione</div>
+    <label id="radiusLabel">RAGGIO DI RICERCA: 100 NM</label>
     <input type="range" id="radiusSlider" min="25" max="250" step="25" value="100">
-    <label>PASSAGGI "IN ARRIVO" ENTRO: <span id="passKmVal">15</span> km</label>
+    <label id="passKmLabel">PASSAGGI "IN ARRIVO" ENTRO: 15 km</label>
     <input type="range" id="passKmSlider" min="5" max="50" step="5" value="15">
     <div class="switch">
-      <span>Escludi aerei a terra</span>
+      <span data-i18n="set.excludeGround">Escludi aerei a terra</span>
       <input type="checkbox" id="chkAirborne">
     </div>
-    <label>STILE MAPPA (si applica subito)</label>
+    <label data-i18n="set.mapStyle">STILE MAPPA (si applica subito)</label>
     <div id="mapStyleChips" style="display:flex;flex-wrap:wrap;gap:6px;">
-      <button class="chip" data-style="topo">RILIEVO</button>
-      <button class="chip" data-style="sat">SATELLITE</button>
-      <button class="chip" data-style="dark">RADAR SCURO</button>
+      <button class="chip" data-style="topo" data-i18n="style.topo">RILIEVO</button>
+      <button class="chip" data-style="sat" data-i18n="style.sat">SATELLITE</button>
+      <button class="chip" data-style="dark" data-i18n="style.dark">RADAR SCURO</button>
     </div>
     <div class="legend">
       <span><i style="background:#ffb454"></i>&lt; 10k ft</span>
       <span><i style="background:#34e08a"></i>10-25k ft</span>
       <span><i style="background:#6fd3ff"></i>&gt; 25k ft</span>
     </div>
-    <button id="applyBtn">APPLICA</button>
+    <label data-i18n="set.language">LINGUA (si applica subito)</label>
+    <div id="langChips" style="display:flex;flex-wrap:wrap;gap:6px;">
+      <button class="chip" data-lang="it">Italiano</button>
+      <button class="chip" data-lang="en">English</button>
+    </div>
+    <button id="applyBtn" data-i18n="set.apply">APPLICA</button>
   </div>
 
   <div id="sheet" class="bsheet">
@@ -212,7 +219,7 @@
           <div id="rDestIata" style="font-size:10px;color:var(--muted);margin-top:2px;"></div>
         </div>
       </div>
-      <div style="font-size:8px;color:var(--muted);margin-top:6px;text-align:right;">rotta: adsbdb.com</div>
+      <div style="font-size:8px;color:var(--muted);margin-top:6px;text-align:right;" data-i18n="apt.route">rotta: adsbdb.com</div>
     </div>
     <div id="routeNote" style="font-size:10px;color:var(--muted);margin-top:8px;"></div>
     <div id="shPhase">
@@ -221,16 +228,16 @@
       <span id="altBarWrap"><span id="altBar"></span></span>
     </div>
     <div class="grid">
-      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><path d="M12 3v18M12 3l-4 4M12 3l4 4"/></svg></span><div class="txt"><span>QUOTA</span><b id="shAlt">--</b></div></div>
-      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><path d="M3 12h14M11 6l6 6-6 6"/></svg></span><div class="txt"><span>VELOCITA</span><b id="shSpd">--</b></div></div>
-      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 12l4-6" fill="#34e08a" stroke="#34e08a"/></svg></span><div class="txt"><span>ROTTA</span><b id="shTrk">--</b></div></div>
-      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><path d="M12 20V4M12 4l-5 5M12 4l5 5"/></svg></span><div class="txt"><span>VARIO</span><b id="shVario">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><path d="M12 3v18M12 3l-4 4M12 3l4 4"/></svg></span><div class="txt"><span data-i18n="cell.alt">QUOTA</span><b id="shAlt">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><path d="M3 12h14M11 6l6 6-6 6"/></svg></span><div class="txt"><span data-i18n="cell.speed">VELOCITA</span><b id="shSpd">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 12l4-6" fill="#34e08a" stroke="#34e08a"/></svg></span><div class="txt"><span data-i18n="cell.track">ROTTA</span><b id="shTrk">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#34e08a" stroke-width="2"><path d="M12 20V4M12 4l-5 5M12 4l5 5"/></svg></span><div class="txt"><span data-i18n="cell.vario">VARIO</span><b id="shVario">--</b></div></div>
     </div>
     <div class="grid" id="techGrid" style="display:none;">
-      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M4 16c4-8 12-8 16 0"/><circle cx="12" cy="16" r="1.5" fill="#6fd3ff"/></svg></span><div class="txt"><span>MACH</span><b id="shMach">--</b></div></div>
-      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M3 12h18M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg></span><div class="txt"><span>ASSETTO</span><b id="shRoll">--</b></div></div>
-      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M3 8h13a3 3 0 100-6M3 14h16a3 3 0 110 6"/></svg></span><div class="txt"><span>VENTO</span><b id="shWind">--</b></div></div>
-      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M12 3v10M12 13a3 3 0 103 3"/><circle cx="12" cy="16" r="3" fill="#6fd3ff"/></svg></span><div class="txt"><span>TEMP EST.</span><b id="shOat">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M4 16c4-8 12-8 16 0"/><circle cx="12" cy="16" r="1.5" fill="#6fd3ff"/></svg></span><div class="txt"><span data-i18n="cell.mach">MACH</span><b id="shMach">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M3 12h18M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg></span><div class="txt"><span data-i18n="cell.roll">ASSETTO</span><b id="shRoll">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M3 8h13a3 3 0 100-6M3 14h16a3 3 0 110 6"/></svg></span><div class="txt"><span data-i18n="cell.wind">VENTO</span><b id="shWind">--</b></div></div>
+      <div class="cell"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6fd3ff" stroke-width="2"><path d="M12 3v10M12 13a3 3 0 103 3"/><circle cx="12" cy="16" r="3" fill="#6fd3ff"/></svg></span><div class="txt"><span data-i18n="cell.oat">TEMP EST.</span><b id="shOat">--</b></div></div>
     </div>
     <div id="shDesc" style="display:none;margin-top:10px;font-size:11px;color:var(--muted);"></div>
     <div class="reg" id="shReg">--</div>

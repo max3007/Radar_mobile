@@ -34,6 +34,9 @@ Funzionalità principali:
   aeroporto sulla loro rotta prima di raggiungerti (es. arrivi a Fiumicino
   visti da Anzio) vengono esclusi come falsi positivi;
 - ricerca tra gli aerei nel raggio e ricerca mondiale per numero di volo;
+- **bilingue IT/EN**: la lingua si rileva dal dispositivo al primo avvio ed è
+  cambiabile dalle impostazioni (interfaccia + termini di volo, direzioni,
+  guida MIRA), con la scelta salvata;
 - pannello **TRAFFICO** a due schede: lista degli aerei nel raggio (cliccabile,
   ordinata per distanza, con emergenze evidenziate) e classifica delle
   compagnie in volo; filtri (raggio, compagnia, esclusione aerei a terra);

@@ -4,6 +4,7 @@
 
 import AIRLINES from './data/airlines.json';
 import IATA2ICAO from './data/iata2icao.json';
+import { t, compassDirs } from './i18n.js';
 
 export function airlineName(cs) {
   if (!cs) return "Privato";
@@ -43,8 +44,8 @@ export function isOnGround(ac) {
 
 // Etichetta di quota, consapevole dei falsi "ground"
 export function altLabel(ac, short) {
-  if (isOnGround(ac)) return short ? 'a terra' : 'TERRA';
-  if (ac.alt_baro === 'ground') return 'bassa quota'; // in volo ma quota non riportata
+  if (isOnGround(ac)) return short ? t('alt.groundShort') : t('alt.ground');
+  if (ac.alt_baro === 'ground') return t('alt.low'); // in volo ma quota non riportata
   return ac.alt_baro != null ? ac.alt_baro + ' ft' : (short ? '' : '--');
 }
 
@@ -64,9 +65,9 @@ export function planeColor(ac, isSel) {
   return altColor(ac.alt_baro, isSel);
 }
 
-// Direzione bussola in italiano
+// Direzione bussola nella lingua corrente
 export function compass(bearing) {
-  var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+  var dirs = compassDirs();
   return dirs[Math.round(((bearing % 360) + 360) % 360 / 45) % 8];
 }
 
@@ -226,33 +227,33 @@ export function routeConsistent(ac, route) {
 // Stato di emergenza: da campo 'emergency' e da squawk speciali
 export function emergencyInfo(ac) {
   var sq = ac.squawk;
-  if (sq === '7500') return 'DIROTTAMENTO';
-  if (sq === '7600') return 'RADIO GUASTA';
-  if (sq === '7700') return 'EMERGENZA GENERALE';
+  if (sq === '7500') return t('em.hijack');
+  if (sq === '7600') return t('em.radio');
+  if (sq === '7700') return t('em.general');
   var e = ac.emergency;
   if (!e || e === 'none') return null;
-  var map = { general: 'EMERGENZA', lifeguard: 'VOLO SANITARIO', minfuel: 'CARBURANTE MINIMO',
-              nordo: 'RADIO GUASTA', unlawful: 'INTERFERENZA ILLECITA', downed: 'AEREO ABBATTUTO' };
-  return map[e] || ('EMERGENZA: ' + e.toUpperCase());
+  var map = { general: 'em.generalShort', lifeguard: 'em.medical', minfuel: 'em.minfuel',
+              nordo: 'em.radio', unlawful: 'em.unlawful', downed: 'em.downed' };
+  return map[e] ? t(map[e]) : t('em.other', { e: e.toUpperCase() });
 }
 
 // Fase di volo dedotta da modi di navigazione, vario e quota
 export function flightPhase(ac) {
   var modes = ac.nav_modes || [];
-  if (isOnGround(ac)) return 'A TERRA';
-  if (modes.indexOf('approach') !== -1) return 'IN AVVICINAMENTO';
+  if (isOnGround(ac)) return t('phase.ground');
+  if (modes.indexOf('approach') !== -1) return t('phase.approach');
   var vr = ac.baro_rate != null ? ac.baro_rate : ac.geom_rate;
   if (vr != null && vr > 300) {
     var tgt = ac.nav_altitude_mcp;
-    if (tgt && typeof ac.alt_baro === 'number') return 'IN SALITA → FL' + Math.round(tgt / 100);
-    return 'IN SALITA';
+    if (tgt && typeof ac.alt_baro === 'number') return t('phase.climbTo', { fl: Math.round(tgt / 100) });
+    return t('phase.climb');
   }
   if (vr != null && vr < -300) {
-    if (typeof ac.alt_baro === 'number' && ac.alt_baro < 10000) return 'IN DISCESA / ARRIVO';
-    return 'IN DISCESA';
+    if (typeof ac.alt_baro === 'number' && ac.alt_baro < 10000) return t('phase.descentArr');
+    return t('phase.descent');
   }
-  if (typeof ac.alt_baro === 'number' && ac.alt_baro > 24000) return 'IN CROCIERA';
+  if (typeof ac.alt_baro === 'number' && ac.alt_baro > 24000) return t('phase.cruise');
   // Flag 'ground' ma in volo (velocita alta): e basso, tipicamente in manovra
-  if (ac.alt_baro === 'ground') return 'IN AVVICINAMENTO';
-  return 'IN VOLO LIVELLATO';
+  if (ac.alt_baro === 'ground') return t('phase.approach');
+  return t('phase.level');
 }
