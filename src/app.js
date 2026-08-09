@@ -178,6 +178,8 @@ export function initApp() {
       map.removeLayer(burntLayer);
     }
     document.getElementById('chkBurnt').checked = on;
+    // La legenda dei colori EFFIS (eta dell'incendio) serve solo a layer acceso
+    document.getElementById('burntLegend').style.display = on ? 'flex' : 'none';
     if (save) savePrefs(buildPrefs());
   }
   document.getElementById('chkFires').addEventListener('change', function () {

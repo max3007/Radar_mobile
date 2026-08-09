@@ -146,3 +146,11 @@ si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda).
 - `nextPass` (CPA) assume rotta/velocità costanti: affidabile ~30 min, per
   questo l'orizzonte è breve e la lista si aggiorna ogni 12 s.
 - Il polling si ferma in background (`visibilitychange`) per risparmiare.
+- **Colori delle aree bruciate**: non li scegliamo noi, vengono dallo stile
+  `default` di EFFIS e codificano l'ETA dell'incendio — rosso: ultime 24 ore;
+  arancione: ultimi 7 giorni; blu: ultimi 90 giorni; verde: oltre 90 giorni.
+  Con la finestra attuale (`FIRE_WMS.burnt.days` = 30) il verde non compare
+  mai, per questo la legenda in impostazioni mostra solo tre voci. Le pastiglie
+  colorate della legenda sono approssimate a occhio sul rendering reale: se
+  EFFIS cambia palette vanno riallineate (in alternativa si puo incorporare
+  la legenda ufficiale via `request=GetLegendGraphic&layer=effis.nrt.ba.poly`).

@@ -171,6 +171,11 @@ ARRIVO</button>
       <input type="checkbox" id="chkBurnt">
     </div>
     <div id="burntNote" data-i18n="set.burntNote" style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.5px;">Dati EFFIS/Copernicus (GWIS, quasi tempo reale) · perimetri degli ultimi 30 giorni</div>
+    <div id="burntLegend" class="legend" style="display:none;">
+      <span><i style="background:#d0453e"></i><span data-i18n="legend.fire24h">ultime 24h</span></span>
+      <span><i style="background:#e39b3c"></i><span data-i18n="legend.fire7d">ultimi 7 giorni</span></span>
+      <span><i style="background:#7cc4e0"></i><span data-i18n="legend.fireOlder">precedenti</span></span>
+    </div>
     <label data-i18n="set.mapStyle">STILE MAPPA (si applica subito)</label>
     <div id="mapStyleChips" style="display:flex;flex-wrap:wrap;gap:6px;">
       <button class="chip" data-style="topo" data-i18n="style.topo">RILIEVO</button>

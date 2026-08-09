@@ -40,6 +40,8 @@ const DICT = {
     'set.firesNote': 'Dati EFFIS/Copernicus · rilevamenti degli ultimi giorni, aggiornati ogni poche ore',
     'set.burnt': 'Mostra aree bruciate (perimetri)',
     'set.burntNote': 'Dati EFFIS/Copernicus (GWIS, quasi tempo reale) · perimetri degli ultimi 30 giorni',
+    // Legenda aree bruciate: il colore EFFIS indica quanto e recente l'incendio
+    'legend.fire24h': 'ultime 24h', 'legend.fire7d': 'ultimi 7 giorni', 'legend.fireOlder': 'precedenti',
     'set.mapStyle': 'STILE MAPPA (si applica subito)',
     'style.topo': 'RILIEVO', 'style.sat': 'SATELLITE', 'style.dark': 'RADAR SCURO',
     'set.language': 'LINGUA (si applica subito)',
@@ -147,6 +149,7 @@ const DICT = {
     'set.firesNote': 'EFFIS/Copernicus data · detections of the last few days, refreshed every few hours',
     'set.burnt': 'Show burnt areas (perimeters)',
     'set.burntNote': 'EFFIS/Copernicus data (GWIS, near real-time) · perimeters from the last 30 days',
+    'legend.fire24h': 'last 24h', 'legend.fire7d': 'last 7 days', 'legend.fireOlder': 'older',
     'set.mapStyle': 'MAP STYLE (applies now)',
     'style.topo': 'RELIEF', 'style.sat': 'SATELLITE', 'style.dark': 'DARK RADAR',
     'set.language': 'LANGUAGE (applies now)',
