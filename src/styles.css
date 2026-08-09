@@ -83,8 +83,13 @@
     .tag-box {
       position: absolute; left: 26px; bottom: 16px; white-space: nowrap;
       background: rgba(6,10,14,0.9); border: 1px solid var(--phosphor-dim);
-      border-radius: 6px; padding: 4px 7px; font-family: var(--mono);
+      border-radius: 6px; padding: 4px 22px 4px 7px; font-family: var(--mono);
       box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+    }
+    /* Icona "espandi": segnala che toccando si aprono i dettagli completi */
+    .tag-box .tag-more {
+      position: absolute; top: 4px; right: 5px; font-size: 12px; line-height: 1;
+      color: var(--phosphor); opacity: 0.9;
     }
     .tag-box .l1 { font-size: 12px; font-weight: 700; color: var(--phosphor); letter-spacing: 0.5px; }
     .tag-box .l2 { font-size: 10px; color: var(--text); margin-top: 1px; }

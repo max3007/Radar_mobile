@@ -169,6 +169,7 @@ export function initApp() {
       html: '<div class="tag-anchor">' +
         '<div class="tag-line"></div>' +
         '<div class="tag-box">' +
+          '<div class="tag-more" aria-hidden="true">\u26F6</div>' +
           '<div class="l1">' + num + '</div>' +
           '<div class="l3" style="color:var(--muted);">' + comp + '</div>' +
           (route ? '<div class="l3">' + route + '</div>' : '') +
