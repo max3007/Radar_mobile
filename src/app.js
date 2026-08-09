@@ -1539,7 +1539,7 @@ export function initApp() {
     savePrefs(buildPrefs());
     if (id === 'gps') {
       if (navigator.geolocation && isSecure) {
-        observerLabel = 'rilevo posizione\u2026'; updateHudFilters();
+        observerLabel = t('obs.locating'); updateHudFilters();
         navigator.geolocation.getCurrentPosition(
           function (pos) {
             if (activeLocation !== 'gps') return; // nel frattempo e stata scelta un'altra postazione
