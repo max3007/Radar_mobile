@@ -41,12 +41,18 @@ export const PASS_ALERT_MIN = 2;
 
 // Overlay incendi: rilevamenti satellitari EFFIS/Copernicus (WMS pubblico,
 // senza chiave). Host e layer verificati via GetCapabilities il 2026-08-09
-// (il vecchio host ies-ows.jrc.ec.europa.eu e stato dismesso).
+// (il vecchio host ies-ows.jrc.ec.europa.eu e stato dismesso). Due layer
+// distinti e selezionabili separatamente:
+// - hotspots: rilevamenti attivi (punto caldo), tutte le fonti satellitari
+//   insieme (MODIS+VIIRS+NOAA) per la massima copertura.
+// - burnt: perimetri delle aree gia bruciate, quasi in tempo reale (basato
+//   su cluster di rilevamenti VIIRS), utile per vedere l'estensione reale
+//   di un incendio in corso e non solo il punto del rilevamento.
 export const FIRE_WMS = {
   url: 'https://maps.effis.emergency.copernicus.eu/effis',
-  layers: 'modis.hs',   // hotspot MODIS (rilevamenti incendi attivi)
   attribution: '&copy; <a href="https://forest-fire.emergency.copernicus.eu/">EFFIS</a> / Copernicus',
-  days: 7               // finestra temporale dei rilevamenti mostrati
+  hotspots: { layers: 'all.hs', days: 7 },
+  burnt: { layers: 'effis.nrt.ba.poly', days: 30 }
 };
 
 export const API = {

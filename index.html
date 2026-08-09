@@ -166,6 +166,11 @@ ARRIVO</button>
       <input type="checkbox" id="chkFires">
     </div>
     <div id="firesNote" data-i18n="set.firesNote" style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.5px;">Dati EFFIS/Copernicus · rilevamenti degli ultimi giorni, aggiornati ogni poche ore</div>
+    <div class="switch">
+      <span data-i18n="set.burnt">Mostra aree bruciate (perimetri)</span>
+      <input type="checkbox" id="chkBurnt">
+    </div>
+    <div id="burntNote" data-i18n="set.burntNote" style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.5px;">Dati EFFIS/Copernicus (GWIS, quasi tempo reale) · perimetri degli ultimi 30 giorni</div>
     <label data-i18n="set.mapStyle">STILE MAPPA (si applica subito)</label>
     <div id="mapStyleChips" style="display:flex;flex-wrap:wrap;gap:6px;">
       <button class="chip" data-style="topo" data-i18n="style.topo">RILIEVO</button>
@@ -205,6 +210,7 @@ ARRIVO</button>
       <div style="font-size:11px;margin-top:3px;color:var(--phosphor);letter-spacing:1px;"><span id="miniPhase">--</span></div>
     </div>
     <div id="emergBanner" style="display:none;margin:0 0 10px;padding:8px 10px;background:rgba(220,40,30,0.2);border:1px solid #dc2828;border-radius:8px;color:#ff6b5a;font-size:12px;font-weight:700;letter-spacing:1px;text-align:center;">&#9888; EMERGENZA</div>
+    <div id="ffBanner" style="display:none;margin:0 0 10px;padding:8px 10px;background:rgba(255,106,0,0.16);border:1px solid #ff6a00;border-radius:8px;color:#ffb454;font-size:12px;font-weight:700;letter-spacing:1px;text-align:center;">&#128293; ANTINCENDIO</div>
     <div id="shHeader">
       <div id="shAirline">--</div>
       <div id="shModel">--</div>

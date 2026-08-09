@@ -38,6 +38,8 @@ const DICT = {
     'set.excludeGround': 'Escludi aerei a terra',
     'set.fires': 'Mostra incendi (rilevamenti satellitari)',
     'set.firesNote': 'Dati EFFIS/Copernicus · rilevamenti degli ultimi giorni, aggiornati ogni poche ore',
+    'set.burnt': 'Mostra aree bruciate (perimetri)',
+    'set.burntNote': 'Dati EFFIS/Copernicus (GWIS, quasi tempo reale) · perimetri degli ultimi 30 giorni',
     'set.mapStyle': 'STILE MAPPA (si applica subito)',
     'style.topo': 'RILIEVO', 'style.sat': 'SATELLITE', 'style.dark': 'RADAR SCURO',
     'set.language': 'LINGUA (si applica subito)',
@@ -66,6 +68,8 @@ const DICT = {
     'route.searching': 'Cerco rotta…', 'route.unreachable': 'Rotta non raggiungibile ({msg})',
     // Emergenza
     'emg.banner': '⚠ {info}', 'emg.squawk': ' · SQUAWK {sq}', 'emg.badge': 'EMERG',
+    // Antincendio
+    'ff.badge': 'ANTINCENDIO', 'ff.nearFire': 'VICINO A UN INCENDIO',
     // Fasi di volo
     'phase.ground': 'A TERRA', 'phase.approach': 'IN AVVICINAMENTO',
     'phase.climbTo': 'IN SALITA → FL{fl}', 'phase.climb': 'IN SALITA',
@@ -141,6 +145,8 @@ const DICT = {
     'set.excludeGround': 'Exclude aircraft on ground',
     'set.fires': 'Show wildfires (satellite detections)',
     'set.firesNote': 'EFFIS/Copernicus data · detections of the last few days, refreshed every few hours',
+    'set.burnt': 'Show burnt areas (perimeters)',
+    'set.burntNote': 'EFFIS/Copernicus data (GWIS, near real-time) · perimeters from the last 30 days',
     'set.mapStyle': 'MAP STYLE (applies now)',
     'style.topo': 'RELIEF', 'style.sat': 'SATELLITE', 'style.dark': 'DARK RADAR',
     'set.language': 'LANGUAGE (applies now)',
@@ -165,6 +171,7 @@ const DICT = {
     'route.nonStandard': 'Route not available (non-standard callsign)',
     'route.searching': 'Looking up route…', 'route.unreachable': 'Route unreachable ({msg})',
     'emg.banner': '⚠ {info}', 'emg.squawk': ' · SQUAWK {sq}', 'emg.badge': 'EMERG',
+    'ff.badge': 'FIREFIGHTING', 'ff.nearFire': 'NEAR A WILDFIRE',
     'phase.ground': 'ON GROUND', 'phase.approach': 'ON APPROACH',
     'phase.climbTo': 'CLIMBING → FL{fl}', 'phase.climb': 'CLIMBING',
     'phase.descentArr': 'DESCENDING / ARRIVAL', 'phase.descent': 'DESCENDING',

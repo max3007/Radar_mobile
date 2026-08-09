@@ -10,7 +10,7 @@ import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, planeColor, altLabel, isOnGround, compass,
   bearingFromCenter, elevationAngle, emergencyInfo, flightPhase,
-  routeConsistent, nextPass, landingBeforePass
+  routeConsistent, nextPass, landingBeforePass, isFirefightingAircraft
 } from './domain.js';
 import { t, setLang, getLang, detectLang, applyStaticI18n } from './i18n.js';
 import AIRPORTS from './data/airports.json';
@@ -22,7 +22,8 @@ var filterAirborne = false;
 var mapStyle = DEFAULT_MAP_STYLE;
 var passKm = DEFAULT_PASS_KM;   // soglia distanza dei passaggi "IN ARRIVO"
 var lang = detectLang();        // lingua UI: rilevata dal dispositivo, override in impostazioni
-var showFires = false;          // overlay incendi (EFFIS) attivo?
+var showFires = false;          // overlay incendi attivi (EFFIS hotspot) attivo?
+var showBurnt = false;          // overlay perimetri aree bruciate (EFFIS) attivo?
 // Multi-postazione: punti di osservazione salvati + selezione attiva.
 // 'gps' (segue la posizione) e 'anzio' sono di sistema, il resto e dell'utente.
 var userLocations = [];
@@ -43,6 +44,7 @@ export function initApp() {
     if (p.passKm >= 5 && p.passKm <= 50) passKm = p.passKm;
     if (p.lang === 'it' || p.lang === 'en') lang = p.lang;
     if (typeof p.showFires === 'boolean') showFires = p.showFires;
+    if (typeof p.showBurnt === 'boolean') showBurnt = p.showBurnt;
     if (Array.isArray(p.locations)) {
       userLocations = p.locations.filter(function (l) {
         return l && typeof l.id === 'string' && typeof l.label === 'string' &&
@@ -58,7 +60,7 @@ export function initApp() {
   }
   function buildPrefs() {
     return { radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne,
-             mapStyle: mapStyle, passKm: passKm, lang: lang, showFires: showFires,
+             mapStyle: mapStyle, passKm: passKm, lang: lang, showFires: showFires, showBurnt: showBurnt,
              locations: userLocations, activeLocationId: activeLocation };
   }
 
@@ -132,18 +134,24 @@ export function initApp() {
     });
   }
 
-  // Overlay incendi (rilevamenti satellitari EFFIS/Copernicus, WMS pubblico)
+  // Overlay incendi (rilevamenti satellitari EFFIS/Copernicus, WMS pubblico):
+  // due layer indipendenti, entrambi opzionali.
+  // - fireLayer: rilevamenti attivi (hotspot, tutte le fonti)
+  // - burntLayer: perimetri delle aree gia bruciate (quasi tempo reale)
+  function fmtWmsDate(d) { return d.toISOString().slice(0, 10); }
+  function wmsTimeRange(days) {
+    var end = new Date();
+    var start = new Date(Date.now() - days * 86400000);
+    return fmtWmsDate(start) + '/' + fmtWmsDate(end);
+  }
   var fireLayer = null;
   function setFires(on, save) {
     showFires = on;
     if (on) {
       if (!fireLayer) {
-        function fmt(d) { return d.toISOString().slice(0, 10); }
-        var end = new Date();
-        var start = new Date(Date.now() - FIRE_WMS.days * 86400000);
         fireLayer = L.tileLayer.wms(FIRE_WMS.url, {
-          layers: FIRE_WMS.layers, format: 'image/png', transparent: true,
-          attribution: FIRE_WMS.attribution, time: fmt(start) + '/' + fmt(end),
+          layers: FIRE_WMS.hotspots.layers, format: 'image/png', transparent: true,
+          attribution: FIRE_WMS.attribution, time: wmsTimeRange(FIRE_WMS.hotspots.days),
           opacity: 0.85, zIndex: 250
         });
       }
@@ -154,10 +162,32 @@ export function initApp() {
     document.getElementById('chkFires').checked = on;
     if (save) savePrefs(buildPrefs());
   }
+  var burntLayer = null;
+  function setBurnt(on, save) {
+    showBurnt = on;
+    if (on) {
+      if (!burntLayer) {
+        burntLayer = L.tileLayer.wms(FIRE_WMS.url, {
+          layers: FIRE_WMS.burnt.layers, format: 'image/png', transparent: true,
+          attribution: FIRE_WMS.attribution, time: wmsTimeRange(FIRE_WMS.burnt.days),
+          opacity: 0.6, zIndex: 240
+        });
+      }
+      burntLayer.addTo(map);
+    } else if (burntLayer) {
+      map.removeLayer(burntLayer);
+    }
+    document.getElementById('chkBurnt').checked = on;
+    if (save) savePrefs(buildPrefs());
+  }
   document.getElementById('chkFires').addEventListener('change', function () {
     setFires(this.checked, true);
   });
+  document.getElementById('chkBurnt').addEventListener('change', function () {
+    setBurnt(this.checked, true);
+  });
   setFires(showFires, false);
+  setBurnt(showBurnt, false);
 
   var markers = {};      // hex -> marker
   var markerState = {};  // hex -> { track, color, sel } per evitare setIcon inutili
@@ -457,8 +487,9 @@ export function initApp() {
   }
   map.on('move zoom viewreset resize', positionSweep);
 
-  function planeIcon(track, color, isSel, emerg) {
-    var cls = 'plane-icon' + (isSel ? ' selected' : '') + (emerg ? ' emerg' : '');
+  function planeIcon(track, color, isSel, emerg, ff, ffNear) {
+    var cls = 'plane-icon' + (isSel ? ' selected' : '') + (emerg ? ' emerg' : '') +
+      (ff ? ' ff' : '') + (ffNear ? ' ff-near' : '');
     var fill = emerg ? '#ff3b30' : color;
     return L.divIcon({
       className: '',
@@ -650,8 +681,9 @@ export function initApp() {
         var isSel = (id === newSel);
         var color = planeColor(ac, isSel);
         var emg = !!emergencyInfo(ac);
-        markers[id].setIcon(planeIcon(ac.track, color, isSel, emg));
-        markerState[id] = { track: ac.track || 0, color: color, sel: isSel, emg: emg };
+        var ff = isFirefightingAircraft(ac);
+        markers[id].setIcon(planeIcon(ac.track, color, isSel, emg, ff, ff && fireNear[id]));
+        markerState[id] = { track: ac.track || 0, color: color, sel: isSel, emg: emg, ff: ff, ffNear: !!(ff && fireNear[id]) };
         if (trails[id] && trails[id].line) {
           trails[id].line.setStyle({ color: isSel ? '#f2fff8' : trails[id].color });
         }
@@ -711,6 +743,15 @@ export function initApp() {
       banner.style.display = 'block';
     } else {
       banner.style.display = 'none';
+    }
+
+    // --- Antincendio (Canadair ecc.), eventualmente vicino a un incendio rilevato ---
+    var ffBanner = document.getElementById('ffBanner');
+    if (isFirefightingAircraft(ac)) {
+      ffBanner.textContent = '\uD83D\uDD25 ' + (fireNear[ac.hex] ? t('ff.nearFire') : t('ff.badge'));
+      ffBanner.style.display = 'block';
+    } else {
+      ffBanner.style.display = 'none';
     }
 
     // --- Fase di volo (signature) con icona e barra quota ---
@@ -858,8 +899,10 @@ export function initApp() {
       var spd = a.gs != null ? Math.round(a.gs) + ' kt' : '--';
       var emg = !!emergencyInfo(a);
       var phase = flightPhase(a) || '';
-      html += '<div class="acrow' + (emg ? ' emg' : '') + '" data-hex="' + a.hex + '">' +
-        '<div class="ac-l"><div class="ac-f">' + flight + (emg ? '<span class="emgbadge">EMERG</span>' : '') + '</div>' +
+      var ff = isFirefightingAircraft(a);
+      var ffBadge = ff ? ('<span class="ffbadge">' + (fireNear[a.hex] ? '🔥 ' + t('ff.nearFire') : t('ff.badge')) + '</span>') : '';
+      html += '<div class="acrow' + (emg ? ' emg' : '') + (ff ? ' ff' : '') + '" data-hex="' + a.hex + '">' +
+        '<div class="ac-l"><div class="ac-f">' + flight + (emg ? '<span class="emgbadge">EMERG</span>' : '') + ffBadge + '</div>' +
           '<div class="ac-sub">' + airlineName(a.flight) + (a.t ? ' · ' + a.t : '') + (phase ? ' · ' + phase : '') + '</div></div>' +
         '<div class="ac-r"><div class="ac-alt">' + alt + ' · ' + spd + '</div>' +
           '<div class="ac-dist">' + km.toFixed(0) + ' km ' + compass(bearingFromCenter(CENTER, a.lat, a.lon)) + '</div></div>' +
@@ -1171,6 +1214,47 @@ export function initApp() {
     }
   }
 
+  // ---------- Canadair vicino a un incendio ----------
+  // Per gli aerei antincendio individuati (v. isFirefightingAircraft), verifica
+  // se sono nei pressi di un rilevamento attivo interrogando il WMS EFFIS con
+  // una GetFeatureInfo puntuale intorno alla posizione dell'aereo. E' un
+  // controllo "best effort": se il servizio non risponde o cambia formato,
+  // l'aereo resta comunque evidenziato come antincendio, solo senza la
+  // conferma di vicinanza (nessun errore visibile all'utente).
+  var FIRE_CHECK_KM = 50;         // raggio della query intorno all'aereo
+  var FIRE_CHECK_MIN_MS = 30000;  // non ricontrollare lo stesso aereo piu spesso di cosi
+  var fireNear = {};      // hex -> true/false (esito ultima verifica riuscita)
+  var fireCheckAt = {};   // hex -> timestamp ultimo tentativo
+  var fireCheckSeq = {};  // hex -> sequenza, scarta risposte fuori ordine
+  function checkFireProximity(ac) {
+    var hex = ac.hex;
+    var now = Date.now();
+    if (fireCheckAt[hex] && now - fireCheckAt[hex] < FIRE_CHECK_MIN_MS) return;
+    fireCheckAt[hex] = now;
+    var seq = (fireCheckSeq[hex] || 0) + 1;
+    fireCheckSeq[hex] = seq;
+    var d = FIRE_CHECK_KM / 111; // gradi approssimati (~111 km/grado)
+    var bbox = [ac.lon - d, ac.lat - d, ac.lon + d, ac.lat + d].join(',');
+    var params = new URLSearchParams({
+      service: 'WMS', version: '1.1.1', request: 'GetFeatureInfo',
+      layers: FIRE_WMS.hotspots.layers, query_layers: FIRE_WMS.hotspots.layers,
+      srs: 'EPSG:4326', bbox: bbox, width: 101, height: 101, x: 50, y: 50,
+      info_format: 'application/json', feature_count: 1,
+      time: wmsTimeRange(FIRE_WMS.hotspots.days)
+    });
+    fetch(FIRE_WMS.url + '?' + params.toString())
+      .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+      .then(function (data) {
+        if (seq !== fireCheckSeq[hex]) return; // risposta superata da una piu recente
+        var near = !!(data && data.features && data.features.length);
+        if (fireNear[hex] !== near) {
+          fireNear[hex] = near;
+          if (markers[hex]) updateSelectedIcons(hex, selected); // ridisegna con lo stato aggiornato
+        }
+      })
+      .catch(function () { /* servizio non raggiungibile: nessuna conferma, nessun errore visibile */ });
+  }
+
   // ---------- Disegno ----------
   function drawPlanes(aircraft) {
     var seen = {};
@@ -1209,27 +1293,32 @@ export function initApp() {
         t.color = color;
       }
 
-      // Marker: setIcon solo se rotta (>3 gradi), colore, selezione o emergenza cambiano
+      // Marker: setIcon solo se rotta (>3 gradi), colore, selezione, emergenza
+      // o stato antincendio/vicinanza a un incendio cambiano
       var st = markerState[id];
       var trackNow = ac.track || 0;
       var emg = !!emergencyInfo(ac);
+      var ff = isFirefightingAircraft(ac);
+      if (ff) checkFireProximity(ac); // throttled internamente
+      var ffNear = ff && !!fireNear[id];
       var dim = (selected && !isSel); // attenua se c'e una selezione e non e questo
       if (markers[id]) {
         markers[id].setLatLng([ac.lat, ac.lon]);
         markers[id]._ac = ac;
-        if (!st || Math.abs((st.track||0) - trackNow) > 3 || st.color !== color || st.sel !== isSel || st.emg !== emg) {
-          markers[id].setIcon(planeIcon(trackNow, color, isSel, emg));
-          markerState[id] = { track: trackNow, color: color, sel: isSel, emg: emg };
+        if (!st || Math.abs((st.track||0) - trackNow) > 3 || st.color !== color || st.sel !== isSel ||
+            st.emg !== emg || st.ff !== ff || st.ffNear !== ffNear) {
+          markers[id].setIcon(planeIcon(trackNow, color, isSel, emg, ff, ffNear));
+          markerState[id] = { track: trackNow, color: color, sel: isSel, emg: emg, ff: ff, ffNear: ffNear };
         }
       } else {
-        var m = L.marker([ac.lat, ac.lon], { icon: planeIcon(trackNow, color, isSel, emg) }).addTo(map);
+        var m = L.marker([ac.lat, ac.lon], { icon: planeIcon(trackNow, color, isSel, emg, ff, ffNear) }).addTo(map);
         m._ac = ac;
         m.on('click', function (e) {
           L.DomEvent.stopPropagation(e);
           openSheet(this._ac);
         });
         markers[id] = m;
-        markerState[id] = { track: trackNow, color: color, sel: isSel, emg: emg };
+        markerState[id] = { track: trackNow, color: color, sel: isSel, emg: emg, ff: ff, ffNear: ffNear };
       }
       // Attenuazione via classe sull'elemento del marker
       var el = markers[id].getElement && markers[id].getElement();

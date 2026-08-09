@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
-  airlineName, toCallsign, fmtFlight, altColor, compass,
+  airlineName, toCallsign, fmtFlight, altColor, planeColor, compass,
   bearingBetween, bearingFromCenter, elevationAngle, destPoint,
   emergencyInfo, flightPhase, routeConsistent, nextPass, landingBeforePass,
-  isOnGround, altLabel
+  isOnGround, altLabel, isFirefightingAircraft
 } from '../src/domain.js';
 import { setLang } from '../src/i18n.js';
 
@@ -320,6 +320,37 @@ describe('altLabel', () => {
   });
   it('quota numerica -> valore in ft', () => {
     expect(altLabel({ alt_baro: 22000, gs: 400 })).toBe('22000 ft');
+  });
+});
+
+describe('isFirefightingAircraft', () => {
+  it('riconosce il codice tipo ICAO del Canadair CL-215T/CL-415', () => {
+    expect(isFirefightingAircraft({ t: 'CL2T' })).toBe(true);
+    expect(isFirefightingAircraft({ t: 'CL4T' })).toBe(true);
+    expect(isFirefightingAircraft({ t: 'cl4t' })).toBe(true); // case-insensitive
+  });
+  it('riconosce dalla descrizione se il codice tipo manca o e diverso', () => {
+    expect(isFirefightingAircraft({ desc: 'CANADAIR CL-415' })).toBe(true);
+    expect(isFirefightingAircraft({ desc: 'Bombardier 415' })).toBe(true);
+    expect(isFirefightingAircraft({ t: 'XXXX', desc: 'CL215' })).toBe(true);
+  });
+  it('aereo normale -> false', () => {
+    expect(isFirefightingAircraft({ t: 'A320', desc: 'AIRBUS A320' })).toBe(false);
+    expect(isFirefightingAircraft({})).toBe(false);
+    expect(isFirefightingAircraft(null)).toBe(false);
+  });
+});
+
+describe('planeColor', () => {
+  it('aereo antincendio -> arancione dedicato, indipendente dalla quota', () => {
+    expect(planeColor({ t: 'CL4T', alt_baro: 35000 }, false)).toBe('#ff6a00');
+    expect(planeColor({ t: 'CL4T', alt_baro: 'ground', gs: 10 }, false)).toBe('#ff6a00');
+  });
+  it('selezionato -> sempre bianco, anche se antincendio', () => {
+    expect(planeColor({ t: 'CL4T', alt_baro: 35000 }, true)).toBe('#f2fff8');
+  });
+  it('aereo normale -> segue la fascia di quota come prima', () => {
+    expect(planeColor({ alt_baro: 5000 }, false)).toBe('#ffb454');
   });
 });
 

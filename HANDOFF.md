@@ -22,7 +22,7 @@ framework — scelta deliberata: il cuore è codice imperativo Leaflet).
 ```bash
 npm install
 npm run dev        # sviluppo (http://localhost:5173)
-npm test           # oppure: npx vitest run   (59 test)
+npm test           # oppure: npx vitest run   (65 test)
 npm run build      # produzione in dist/
 npm run preview    # anteprima build (http://localhost:4173)
 ```
@@ -41,10 +41,11 @@ src/app.js          TUTTA la logica applicativa (una grande initApp con chiusure
 src/domain.js       funzioni PURE e testate: airlineName, toCallsign, fmtFlight,
                     compass, bearing*, elevationAngle, destPoint, altColor,
                     planeColor, altLabel, isOnGround, emergencyInfo, flightPhase,
-                    routeConsistent, nextPass (CPA), landingBeforePass
+                    routeConsistent, nextPass (CPA), landingBeforePass,
+                    isFirefightingAircraft (Canadair/water bomber)
 src/i18n.js         dizionari it/en + t(key,params) + applyStaticI18n + compassDirs
 src/config.js       costanti: centro, raggio, polling, URL API, stili mappa,
-                    soglie IN ARRIVO, FIRE_WMS (incendi)
+                    soglie IN ARRIVO, FIRE_WMS (incendi: hotspot + aree bruciate)
 src/prefs.js        load/save preferenze (localStorage 'radarPrefs')
 src/data/*.json     airlines (ICAO→nome), iata2icao, airports
 src/styles.css      tutti gli stili (tema "fosforo" HUD)
@@ -94,7 +95,13 @@ multi-postazione con ricerca luoghi (Nominatim) e conferma eliminazione ·
 riconoscimento falsi "a terra" (flag ground ad alta velocità) · **segui aereo**
 con avviso in-app (banner+vibrazione+suono) al sorvolo · tasto **back** chiude
 le finestre (History API) · **bilingue IT/EN** (auto-detect + selettore) ·
-icona "espandi" sulla finestrella · **overlay incendi** EFFIS.
+icona "espandi" sulla finestrella · **overlay incendi** EFFIS: rilevamenti
+attivi (`all.hs`, tutte le fonti) + **perimetri aree bruciate** (`effis.nrt.ba.poly`,
+quasi tempo reale) come layer indipendenti · **Canadair vicino agli incendi**:
+riconosce gli aerei antincendio (Canadair CL-215/CL-415, per codice tipo ICAO
+o descrizione) e li evidenzia con colore/icona dedicati; se rilevati vicino a
+un hotspot attivo (verifica via WMS GetFeatureInfo, best-effort) l'evidenza
+si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda).
 
 ## DA VERIFICARE SUL CAMPO (non testabile in sandbox)
 
@@ -106,17 +113,27 @@ icona "espandi" sulla finestrella · **overlay incendi** EFFIS.
    aggiornato in `src/config.js`. Resta da confermare sul campo che le tile
    effettivamente si carichino (nel sandbox il dominio è bloccato dal proxy
    di rete, quindi non renderizzabile qui).
-2. **MIRA / GPS / bussola**: sensori reali del telefono (iOS chiede permesso).
+2. **Perimetri aree bruciate (`effis.nrt.ba.poly`)** — stesso discorso del
+   punto 1: layer nuovo, mai visto renderizzare tile reali (dominio bloccato
+   dal proxy in sandbox). Verificare sul campo che il checkbox "Mostra aree
+   bruciate" mostri effettivamente dei poligoni.
+3. **Canadair vicino agli incendi (GetFeatureInfo)** — la query di prossimità
+   (`checkFireProximity` in `src/app.js`) è verificata solo con risposte
+   MOCK in Playwright (URL costruito correttamente, stato UI si aggiorna).
+   MAI testata contro il vero servizio EFFIS: verificare sul campo che
+   `GetFeatureInfo` risponda in JSON per il layer `all.hs` con VERSION=1.1.1
+   (assunto per coerenza con L.tileLayer.wms che di default usa 1.1.1); se il
+   servizio non risponde o cambia formato la query fallisce silenziosamente
+   (fetch in `.catch` vuoto) e l'aereo resta comunque evidenziato come
+   antincendio, solo senza la conferma "vicino a un incendio".
+4. **MIRA / GPS / bussola**: sensori reali del telefono (iOS chiede permesso).
    Verificare che l'asse verticale non sia invertito su alcuni device.
-3. **Notifiche follow**: avviso in-app funziona solo con app aperta in
+5. **Notifiche follow**: avviso in-app funziona solo con app aperta in
    foreground (nessun backend). Push a schermo spento = lavoro futuro (Web Push
    + serverless su Vercel).
 
 ## Backlog / idee future
 
-- **Canadair vicino agli incendi**: evidenziare aerei antincendio (tipo CL-415,
-  categoria) prossimi a un hotspot rilevato — collega i due dati, molto "su
-  misura" per l'app.
 - Push notifications a schermo spento (serverless Vercel + VAPID).
 - Storico avvistamenti con statistiche.
 - AR reale su fotocamera per MIRA.

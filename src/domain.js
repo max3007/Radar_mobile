@@ -59,10 +59,26 @@ export function altColor(alt, isSel) {
   return '#6fd3ff';
 }
 // Colore per un aereo, gestendo i falsi "ground" (in volo basso -> ambra)
+// e gli aerei antincendio (colore dedicato, indipendente dalla quota, cosi
+// restano riconoscibili a colpo d'occhio in mezzo al traffico normale).
 export function planeColor(ac, isSel) {
+  if (isSel) return '#f2fff8';
+  if (isFirefightingAircraft(ac)) return '#ff6a00';
   if (isOnGround(ac)) return altColor('ground', isSel);
   if (ac.alt_baro === 'ground') return altColor(500, isSel); // in volo basso
   return altColor(ac.alt_baro, isSel);
+}
+
+// Aereo antincendio: riconosce i Canadair CL-215/CL-415 (i water bomber piu
+// diffusi in Italia/Europa) dal codice tipo ICAO o dalla descrizione. Il
+// codice tipo e il segnale piu affidabile; la descrizione e un ripiego per
+// varianti/aliasing non censiti.
+var FIREFIGHTING_TYPE_CODES = ['CL2T', 'CL4T']; // CL-215T, CL-415/Bombardier 415
+var FIREFIGHTING_DESC_RE = /CANADAIR|BOMBARDIER\s*415|\bCL[\s-]?(215|415)\b/i;
+export function isFirefightingAircraft(ac) {
+  if (!ac) return false;
+  if (FIREFIGHTING_TYPE_CODES.indexOf((ac.t || '').toUpperCase()) !== -1) return true;
+  return FIREFIGHTING_DESC_RE.test(ac.desc || '');
 }
 
 // Direzione bussola nella lingua corrente
