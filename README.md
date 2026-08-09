@@ -10,6 +10,9 @@ Funzionalità principali:
 - **mirino** sul punto di osservazione (puntino con ping pulsante e crocino);
 - **stili mappa** selezionabili: rilievo (default), satellite, radar scuro;
 - **aeroporti** nel raggio con sigla e nome (tap per il dettaglio);
+- overlay **incendi** attivabile: rilevamenti satellitari EFFIS/Copernicus
+  (WMS pubblico, senza chiave) sovrapposti alla mappa — utile per capire dove
+  operano i Canadair antincendio;
 - riconoscimento dei falsi "a terra": il flag ADS-B `ground` a velocità di
   volo (es. un aereo a 200 kt in avvicinamento) viene mostrato come in volo a
   bassa quota, non a terra;

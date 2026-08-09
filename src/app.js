@@ -5,7 +5,7 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
-import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN } from './config.js';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN, FIRE_WMS } from './config.js';
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, planeColor, altLabel, isOnGround, compass,
@@ -22,6 +22,7 @@ var filterAirborne = false;
 var mapStyle = DEFAULT_MAP_STYLE;
 var passKm = DEFAULT_PASS_KM;   // soglia distanza dei passaggi "IN ARRIVO"
 var lang = detectLang();        // lingua UI: rilevata dal dispositivo, override in impostazioni
+var showFires = false;          // overlay incendi (EFFIS) attivo?
 // Multi-postazione: punti di osservazione salvati + selezione attiva.
 // 'gps' (segue la posizione) e 'anzio' sono di sistema, il resto e dell'utente.
 var userLocations = [];
@@ -41,6 +42,7 @@ export function initApp() {
     if (TILE_STYLES[p.mapStyle]) mapStyle = p.mapStyle;
     if (p.passKm >= 5 && p.passKm <= 50) passKm = p.passKm;
     if (p.lang === 'it' || p.lang === 'en') lang = p.lang;
+    if (typeof p.showFires === 'boolean') showFires = p.showFires;
     if (Array.isArray(p.locations)) {
       userLocations = p.locations.filter(function (l) {
         return l && typeof l.id === 'string' && typeof l.label === 'string' &&
@@ -56,7 +58,8 @@ export function initApp() {
   }
   function buildPrefs() {
     return { radiusNM: radiusNM, filterAirline: filterAirline, filterAirborne: filterAirborne,
-             mapStyle: mapStyle, passKm: passKm, lang: lang, locations: userLocations, activeLocationId: activeLocation };
+             mapStyle: mapStyle, passKm: passKm, lang: lang, showFires: showFires,
+             locations: userLocations, activeLocationId: activeLocation };
   }
 
   // Applica la lingua a tutte le stringhe statiche dell'interfaccia
@@ -128,6 +131,33 @@ export function initApp() {
       setMapStyle(this.getAttribute('data-style'), true);
     });
   }
+
+  // Overlay incendi (rilevamenti satellitari EFFIS/Copernicus, WMS pubblico)
+  var fireLayer = null;
+  function setFires(on, save) {
+    showFires = on;
+    if (on) {
+      if (!fireLayer) {
+        function fmt(d) { return d.toISOString().slice(0, 10); }
+        var end = new Date();
+        var start = new Date(Date.now() - FIRE_WMS.days * 86400000);
+        fireLayer = L.tileLayer.wms(FIRE_WMS.url, {
+          layers: FIRE_WMS.layers, format: 'image/png', transparent: true,
+          attribution: FIRE_WMS.attribution, time: fmt(start) + '/' + fmt(end),
+          opacity: 0.85, zIndex: 250
+        });
+      }
+      fireLayer.addTo(map);
+    } else if (fireLayer) {
+      map.removeLayer(fireLayer);
+    }
+    document.getElementById('chkFires').checked = on;
+    if (save) savePrefs(buildPrefs());
+  }
+  document.getElementById('chkFires').addEventListener('change', function () {
+    setFires(this.checked, true);
+  });
+  setFires(showFires, false);
 
   var markers = {};      // hex -> marker
   var markerState = {};  // hex -> { track, color, sel } per evitare setIcon inutili

@@ -39,6 +39,16 @@ export const PASS_OVERHEAD_KM = 2;
 // questi minuti.
 export const PASS_ALERT_MIN = 2;
 
+// Overlay incendi: rilevamenti satellitari EFFIS/Copernicus (WMS pubblico,
+// senza chiave). I nomi layer hotspot MODIS/VIIRS sono quelli storici di
+// EFFIS; se non comparissero, verificarli via GetCapabilities e aggiornarli qui.
+export const FIRE_WMS = {
+  url: 'https://ies-ows.jrc.ec.europa.eu/effis',
+  layers: 'modis.hs',   // hotspot MODIS (rilevamenti incendi attivi)
+  attribution: '&copy; <a href="https://forest-fire.emergency.copernicus.eu/">EFFIS</a> / Copernicus',
+  days: 7               // finestra temporale dei rilevamenti mostrati
+};
+
 export const API = {
   // Posizioni ADS-B in tempo reale (gratuita, senza chiave)
   planesPoint: 'https://api.airplanes.live/v2/point/',       // + lat/lon/raggioNM
