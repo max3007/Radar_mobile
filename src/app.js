@@ -1375,6 +1375,7 @@ export function initApp() {
   var lastErrWhy = null;
   function showNetError(why, immediate) {
     failStreak++;
+    backoffLevel++; // rallenta: al prossimo giro aspettiamo di piu
     lastErrWhy = why;
     // immediate: quando e il server a dire esplicitamente cosa non va, non ha
     // senso aspettare la conferma di un secondo tentativo.
@@ -1384,6 +1385,7 @@ export function initApp() {
   }
   function clearNetError() {
     failStreak = 0;
+    backoffLevel = -1; // di nuovo tutto bene: si torna al ritmo normale
     lastErrWhy = null;
     errBar.style.display = 'none';
   }
@@ -1458,14 +1460,36 @@ export function initApp() {
     }
   }
 
-  // Pausa in background per risparmiare batteria e richieste
+  // Attesa progressiva quando l'API rifiuta: continuare a bussare ogni 12 s a
+  // un servizio che ci sta gia dicendo di no non serve a niente e puo solo
+  // prolungare il blocco. Al primo esito positivo si torna al ritmo normale.
+  var BACKOFF_MS = [30000, 60000, 120000, 300000];
+  var backoffLevel = -1; // -1 = tutto bene, ritmo normale
+  function currentPollDelay() {
+    if (backoffLevel < 0) return POLL_INTERVAL_MS;
+    return BACKOFF_MS[Math.min(backoffLevel, BACKOFF_MS.length - 1)];
+  }
+
+  // Pausa in background per risparmiare batteria e richieste.
+  // Ciclo a setTimeout invece che setInterval: cosi l'attesa successiva puo
+  // cambiare a seconda di com'e andata l'ultima richiesta.
+  var pollingOn = false;
+  function pollLoop() {
+    // finally e non then: se fetchPlanes fallisse in modo imprevisto il ciclo
+    // si fermerebbe e l'app resterebbe muta per sempre.
+    fetchPlanes().finally(function () {
+      if (!pollingOn) return;
+      timer = setTimeout(pollLoop, currentPollDelay());
+    });
+  }
   function startPolling() {
-    if (timer) return;
-    fetchPlanes();
-    timer = setInterval(fetchPlanes, POLL_INTERVAL_MS);
+    if (pollingOn) return;
+    pollingOn = true;
+    pollLoop();
   }
   function stopPolling() {
-    if (timer) { clearInterval(timer); timer = null; }
+    pollingOn = false;
+    if (timer) { clearTimeout(timer); timer = null; }
   }
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
