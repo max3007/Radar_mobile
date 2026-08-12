@@ -14,8 +14,9 @@ framework — scelta deliberata: il cuore è codice imperativo Leaflet).
 
 ## Stack e comandi
 
-- **Vanilla JS + Vite**, Leaflet da npm, PWA via `vite-plugin-pwa`, test con
-  **Vitest**. Nessun backend: tutte le API sono chiamate dal client.
+- **Vanilla JS + Vite**, Leaflet da npm (+ `leaflet-rotate` per la mappa
+  orientabile), PWA via `vite-plugin-pwa`, test con **Vitest**. Nessun
+  backend: tutte le API sono chiamate dal client.
 - Deploy: **Vercel** (statico, preset Vite). Push su `main` → deploy in
   produzione. URL: `radar-mobile.vercel.app`.
 
@@ -101,7 +102,9 @@ quasi tempo reale) come layer indipendenti · **Canadair vicino agli incendi**:
 riconosce gli aerei antincendio (Canadair CL-215/CL-415, per codice tipo ICAO
 o descrizione) e li evidenzia con colore/icona dedicati; se rilevati vicino a
 un hotspot attivo (verifica via WMS GetFeatureInfo, best-effort) l'evidenza
-si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda).
+si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda) ·
+**mappa orientata come guardi** (bussola): interruttore in impostazioni che
+ruota la mappa verso dove punti il telefono, con freccia del nord.
 
 ## DA VERIFICARE SUL CAMPO (non testabile in sandbox)
 
@@ -128,6 +131,12 @@ si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda).
    antincendio, solo senza la conferma "vicino a un incendio".
 4. **MIRA / GPS / bussola**: sensori reali del telefono (iOS chiede permesso).
    Verificare che l'asse verticale non sia invertito su alcuni device.
+   Vale anche per la **mappa orientata**: la logica di rotazione e verificata
+   con eventi di orientamento SIMULATI in Playwright (verso, freccia del nord
+   e dimensione del cerchio radar corretti), ma mai con una bussola vera.
+   Da controllare sul campo: che non "tremi" (in caso alzare `MC_SMOOTH` /
+   `MC_MIN_DELTA` in `app.js`) e che su iOS il permesso venga chiesto al
+   tocco dell'interruttore.
 5. **Notifiche follow**: avviso in-app funziona solo con app aperta in
    foreground (nessun backend). Push a schermo spento = lavoro futuro (Web Push
    + serverless su Vercel).
@@ -146,6 +155,16 @@ si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda).
 - `nextPass` (CPA) assume rotta/velocità costanti: affidabile ~30 min, per
   questo l'orizzonte è breve e la lista si aggiorna ogni 12 s.
 - Il polling si ferma in background (`visibilitychange`) per risparmiare.
+- **Mappa orientata**: la rotazione la fa `leaflet-rotate` (`map.setBearing`),
+  la prua stabile la calcoliamo noi (media circolare su sin/cos, come MIRA).
+  `setBearing(-prua)`: il segno meno porta in alto la direzione in cui guardi.
+  I marker degli aerei hanno `rotateWithView: true` cosi la prua continua a
+  indicare la direzione reale; tutto il resto (aeroporti, targhetta, mirino)
+  resta col default `false` e quindi dritto e leggibile. Non e una preferenza
+  persistente ma una modalita come MIRA: al riavvio si riparte da nord in alto.
+- `touchRotate` e `shiftKeyRotate` sono spenti di proposito: la mappa ruota
+  solo dalla bussola, per non ruotare per sbaglio durante il pinch-zoom.
+  Se un domani si vuole la rotazione a due dita, basta `touchRotate: true`.
 - **Colori delle aree bruciate**: non li scegliamo noi, vengono dallo stile
   `default` di EFFIS e codificano l'ETA dell'incendio — rosso: ultime 24 ore;
   arancione: ultimi 7 giorni; blu: ultimi 90 giorni; verde: oltre 90 giorni.

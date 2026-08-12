@@ -5,6 +5,9 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
+// Abilita la rotazione della mappa (patcha L.Map): serve alla modalita
+// "mappa orientata come guardi", vedi setMapCompass piu sotto.
+import 'leaflet-rotate';
 import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN, FIRE_WMS } from './config.js';
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
@@ -102,10 +105,17 @@ export function initApp() {
   document.getElementById('airlineSearch').value = filterAirline;
   document.getElementById('chkAirborne').checked = filterAirborne;
 
-  // Attribuzione obbligatoria per le tile, in forma discreta
+  // Attribuzione obbligatoria per le tile, in forma discreta.
+  // rotate: abilita la rotazione (leaflet-rotate). La pilotiamo noi dalla
+  // bussola (setMapCompass); touchRotate resta spento per non far ruotare la
+  // mappa per sbaglio durante il pinch-zoom.
   var map = L.map('map', {
     zoomControl: false,
-    attributionControl: true
+    attributionControl: true,
+    rotate: true,
+    touchRotate: false,
+    shiftKeyRotate: false,
+    rotateControl: false
   }).setView(CENTER, 8);
   map.attributionControl.setPrefix(false);
 
@@ -190,6 +200,101 @@ export function initApp() {
   });
   setFires(showFires, false);
   setBurnt(showBurnt, false);
+
+  // ---------- Mappa orientata come guardi (bussola) ----------
+  // Invece del classico "nord in alto", ruota la mappa in modo che la
+  // direzione verso cui punti il telefono sia sempre verso l'alto: quello che
+  // vedi sullo schermo corrisponde a quello che hai davanti.
+  // La rotazione vera e propria la fa leaflet-rotate (map.setBearing); qui
+  // ricaviamo una prua STABILE dalla bussola, perche il dato grezzo oscilla
+  // di continuo e la mappa tremerebbe.
+  var mapCompassOn = false;
+  var mapCompassHandler = null;
+  // Media circolare su seno/coseno: evita il salto 359->0 che una media
+  // normale sui gradi gestirebbe male. Stessa tecnica usata da MIRA.
+  var mcSin = null, mcCos = null;
+  var MC_SMOOTH = 0.12;      // piu basso = piu stabile ma piu lento a seguire
+  var MC_MIN_DELTA = 1.5;    // gradi: sotto questa soglia non ridisegna nulla
+  var mcLastApplied = null;  // ultima prua realmente applicata alla mappa
+
+  function applyBearing(deg) {
+    // setBearing(-prua): cosi la direzione in cui guardi finisce in alto
+    map.setBearing(-deg);
+    updateNorthNeedle(deg);
+  }
+  function onCompassForMap(e) {
+    var heading = null;
+    if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
+    else if (e.alpha != null) heading = 360 - e.alpha; // Android: alpha antiorario da Nord
+    if (heading == null) return;
+    var rad = heading * Math.PI / 180;
+    if (mcSin == null) { mcSin = Math.sin(rad); mcCos = Math.cos(rad); }
+    else {
+      mcSin = mcSin * (1 - MC_SMOOTH) + Math.sin(rad) * MC_SMOOTH;
+      mcCos = mcCos * (1 - MC_SMOOTH) + Math.cos(rad) * MC_SMOOTH;
+    }
+    var smoothed = (Math.atan2(mcSin, mcCos) * 180 / Math.PI + 360) % 360;
+    // Ridisegna solo a variazione percettibile: la rotazione e costosa
+    if (mcLastApplied != null) {
+      var diff = Math.abs(((smoothed - mcLastApplied + 540) % 360) - 180);
+      if (diff < MC_MIN_DELTA) return;
+    }
+    mcLastApplied = smoothed;
+    applyBearing(smoothed);
+  }
+  function attachMapCompass() {
+    if (mapCompassHandler) return;
+    mapCompassHandler = onCompassForMap;
+    window.addEventListener('deviceorientationabsolute', mapCompassHandler, true);
+    window.addEventListener('deviceorientation', mapCompassHandler, true);
+  }
+  function detachMapCompass() {
+    if (!mapCompassHandler) return;
+    window.removeEventListener('deviceorientationabsolute', mapCompassHandler, true);
+    window.removeEventListener('deviceorientation', mapCompassHandler, true);
+    mapCompassHandler = null;
+  }
+  // Non e una preferenza persistente ma una modalita che si accende quando sei
+  // fuori a guardare il cielo, come MIRA: al riavvio riparte da "nord in alto".
+  function setMapCompass(on) {
+    mapCompassOn = on;
+    var note = document.getElementById('compassNote');
+    if (on) {
+      // iOS 13+ richiede un permesso esplicito, concedibile solo da un gesto
+      // dell'utente: qui siamo dentro il tocco sull'interruttore, quindi va bene.
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(function (resp) {
+          if (resp === 'granted') { attachMapCompass(); if (note) note.textContent = ''; }
+          else { if (note) note.textContent = t('mira.permDenied'); setMapCompass(false); }
+        }).catch(function () {
+          if (note) note.textContent = t('mira.unavailable');
+          setMapCompass(false);
+        });
+      } else if (window.DeviceOrientationEvent) {
+        attachMapCompass();
+        if (note) note.textContent = '';
+      } else {
+        mapCompassOn = false;
+        if (note) note.textContent = t('mira.unsupported');
+      }
+    } else {
+      detachMapCompass();
+      mcSin = null; mcCos = null; mcLastApplied = null;
+      applyBearing(0); // torna a nord in alto
+    }
+    document.getElementById('chkCompass').checked = mapCompassOn;
+    // La freccia del nord serve solo a mappa ruotata
+    document.getElementById('northNeedle').style.display = mapCompassOn ? 'flex' : 'none';
+  }
+  // Freccia che indica dove sta il nord quando la mappa e ruotata
+  function updateNorthNeedle(headingDeg) {
+    var arrow = document.getElementById('northArrow');
+    if (arrow) arrow.style.transform = 'rotate(' + (-headingDeg) + 'deg)';
+  }
+  document.getElementById('chkCompass').addEventListener('change', function () {
+    setMapCompass(this.checked);
+  });
+  setMapCompass(false);
 
   var markers = {};      // hex -> marker
   var markerState = {};  // hex -> { track, color, sel } per evitare setIcon inutili
@@ -481,7 +586,9 @@ export function initApp() {
     var c = map.latLngToContainerPoint(CENTER);
     var east = L.latLng(CENTER[0], CENTER[1] + (radiusNM * 1.852 / (111.32 * Math.cos(CENTER[0] * Math.PI / 180))));
     var e = map.latLngToContainerPoint(east);
-    var d = Math.abs(e.x - c.x) * 2;
+    // Distanza piena (non solo la componente x): a mappa ruotata l'est non e
+    // piu orizzontale sullo schermo e il solo delta x sottostimerebbe il raggio.
+    var d = c.distanceTo(e) * 2;
     sweepEl.style.width = d + 'px';
     sweepEl.style.height = d + 'px';
     sweepEl.style.left = c.x + 'px';
@@ -1106,7 +1213,7 @@ export function initApp() {
     var inRange = lastAircraft.some(function (a) { return a.hex === ac.hex; });
     if (!inRange && ac.lat != null) {
       clearSearchMarker();
-      searchMarker = L.marker([ac.lat, ac.lon], { icon: planeIcon(ac.track, '#ffb454', true) }).addTo(map);
+      searchMarker = L.marker([ac.lat, ac.lon], { icon: planeIcon(ac.track, '#ffb454', true), rotateWithView: true }).addTo(map);
       searchMarker._ac = ac;
       searchMarker.on('click', function (e) { L.DomEvent.stopPropagation(e); openSheet(this._ac); });
     }
@@ -1313,7 +1420,13 @@ export function initApp() {
           markerState[id] = { track: trackNow, color: color, sel: isSel, emg: emg, ff: ff, ffNear: ffNear };
         }
       } else {
-        var m = L.marker([ac.lat, ac.lon], { icon: planeIcon(trackNow, color, isSel, emg, ff, ffNear) }).addTo(map);
+        // rotateWithView: l'icona segue la rotazione della mappa, cosi la prua
+        // continua a indicare la direzione reale anche a mappa orientata.
+        // Le etichette (aeroporti, targhetta, mirino) restano dritte: per
+        // loro vale il default rotateWithView:false.
+        var m = L.marker([ac.lat, ac.lon], {
+          icon: planeIcon(trackNow, color, isSel, emg, ff, ffNear), rotateWithView: true
+        }).addTo(map);
         m._ac = ac;
         m.on('click', function (e) {
           L.DomEvent.stopPropagation(e);
@@ -1580,7 +1693,7 @@ export function initApp() {
       clearSearchMarker();
       if (!markers[ac.hex]) {
         searchMarker = L.marker([ac.lat, ac.lon], {
-          icon: planeIcon(ac.track, '#ffb454', true)
+          icon: planeIcon(ac.track, '#ffb454', true), rotateWithView: true
         }).addTo(map);
         searchMarker._ac = ac;
         searchMarker.on('click', function (e) { L.DomEvent.stopPropagation(e); openSheet(this._ac); });
