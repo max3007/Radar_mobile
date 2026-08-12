@@ -1548,8 +1548,14 @@ export function initApp() {
       data = await res.json();
     } catch (e) {
       if (seq !== fetchSeq) return;
-      // Distingue il rifiuto del server (HTTP nnn) dalla rete irraggiungibile
-      showNetError(/^HTTP /.test(e.message) ? e.message : t('err.network'));
+      // Una fetch che fallisce SENZA risposta HTTP puo voler dire due cose
+      // molto diverse: telefono davvero offline, oppure connessione a posto e
+      // singola richiesta bloccata (CORS, filtro DNS/ad-block, firewall,
+      // server irraggiungibile). Il browser non lo dice, ma navigator.onLine
+      // separa almeno i due casi ed evita di dare la colpa alla connessione.
+      var why = /^HTTP /.test(e.message) ? e.message
+              : (navigator.onLine === false ? t('err.offline') : t('err.blocked'));
+      showNetError(why);
       return;
     }
     if (seq !== fetchSeq) return; // risposta superata da una piu recente: scarta
