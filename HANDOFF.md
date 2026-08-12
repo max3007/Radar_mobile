@@ -14,9 +14,8 @@ framework — scelta deliberata: il cuore è codice imperativo Leaflet).
 
 ## Stack e comandi
 
-- **Vanilla JS + Vite**, Leaflet da npm (+ `leaflet-rotate` per la mappa
-  orientabile), PWA via `vite-plugin-pwa`, test con **Vitest**. Nessun
-  backend: tutte le API sono chiamate dal client.
+- **Vanilla JS + Vite**, Leaflet da npm, PWA via `vite-plugin-pwa`, test con
+  **Vitest**. Nessun backend: tutte le API sono chiamate dal client.
 - Deploy: **Vercel** (statico, preset Vite). Push su `main` → deploy in
   produzione. URL: `radar-mobile.vercel.app`.
 
@@ -102,9 +101,7 @@ quasi tempo reale) come layer indipendenti · **Canadair vicino agli incendi**:
 riconosce gli aerei antincendio (Canadair CL-215/CL-415, per codice tipo ICAO
 o descrizione) e li evidenzia con colore/icona dedicati; se rilevati vicino a
 un hotspot attivo (verifica via WMS GetFeatureInfo, best-effort) l'evidenza
-si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda) ·
-**mappa ruotabile**: "orienta la mappa come guardi" (bussola) da impostazioni
-e rotazione a due dita, con freccia del nord che rimette il nord in alto.
+si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda).
 
 ## DA VERIFICARE SUL CAMPO (non testabile in sandbox)
 
@@ -131,12 +128,6 @@ e rotazione a due dita, con freccia del nord che rimette il nord in alto.
    antincendio, solo senza la conferma "vicino a un incendio".
 4. **MIRA / GPS / bussola**: sensori reali del telefono (iOS chiede permesso).
    Verificare che l'asse verticale non sia invertito su alcuni device.
-   Vale anche per la **mappa orientata**: la logica di rotazione e verificata
-   con eventi di orientamento SIMULATI in Playwright (verso, freccia del nord
-   e dimensione del cerchio radar corretti), ma mai con una bussola vera.
-   Da controllare sul campo: che non "tremi" (in caso alzare `MC_SMOOTH` /
-   `MC_MIN_DELTA` in `app.js`) e che su iOS il permesso venga chiesto al
-   tocco dell'interruttore.
 5. **Notifiche follow**: avviso in-app funziona solo con app aperta in
    foreground (nessun backend). Push a schermo spento = lavoro futuro (Web Push
    + serverless su Vercel).
@@ -168,25 +159,10 @@ e rotazione a due dita, con freccia del nord che rimette il nord in alto.
   stesso `catch` della rete e si leggeva "segnale perso": si finiva a cercare
   un problema di connessione mentre era un bug nostro. Il banner compare dal
   SECONDO fallimento di fila, cosi un buco isolato non allarma.
-- **Mappa orientata**: la rotazione la fa `leaflet-rotate` (`map.setBearing`),
-  la prua stabile la calcoliamo noi (media circolare su sin/cos, come MIRA).
-  `setBearing(-prua)`: il segno meno porta in alto la direzione in cui guardi.
-  I marker degli aerei hanno `rotateWithView: true` cosi la prua continua a
-  indicare la direzione reale; tutto il resto (aeroporti, targhetta, mirino)
-  resta col default `false` e quindi dritto e leggibile. Non e una preferenza
-  persistente ma una modalita come MIRA: al riavvio si riparte da nord in alto.
-- Si ruota in due modi e convivono: bussola e **due dita** (`touchRotate`).
-  Attenzione: in leaflet-rotate zoom e rotazione sono lo STESSO gesto a due
-  dita (`TouchGestures`), quindi ogni pinch-zoom ruota anche un po'. Per
-  questo il gesto spegne la bussola solo oltre `GESTURE_ROTATE_OFF` (10°):
-  sotto quella soglia e considerato torsione involontaria da pinch-zoom.
-  Durante il gesto la bussola e sospesa (`gestureBearing`) per non combattere
-  con le dita, e a fine gesto la rotazione scelta viene mantenuta
-  (`setMapCompass(false, keepBearing=true)`).
-- La freccia del nord e guidata dall'evento `rotate` della mappa (non dalla
-  bussola), quindi resta corretta anche a rotazione manuale; compare quando
-  il bearing non e 0 e toccandola si rimette il nord in alto.
-- `shiftKeyRotate` resta spento (e da desktop, non serve).
+- **L'API puo rifiutare rispondendo 200 con un corpo di errore**
+  (`{"error": "please contact us at contact@airplanes.live"}`): e cosi che
+  airplanes.live segnala un client bloccato. `fetchPlanes` lo riconosce e lo
+  mostra nel banner, altrimenti si vedrebbero solo zero contatti senza motivo.
 - **Colori delle aree bruciate**: non li scegliamo noi, vengono dallo stile
   `default` di EFFIS e codificano l'ETA dell'incendio — rosso: ultime 24 ore;
   arancione: ultimi 7 giorni; blu: ultimi 90 giorni; verde: oltre 90 giorni.

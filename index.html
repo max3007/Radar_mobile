@@ -29,12 +29,6 @@
 
   <div id="map"></div>
   <div id="sweep"><div class="cone"></div></div>
-  <!-- Freccia del nord: a mappa ruotata dice sempre da che parte sta il nord.
-       Toccandola si rimette il nord in alto. -->
-  <div id="northNeedle" style="display:none;" role="button" tabindex="0"
-       data-i18n-title="map.northUp" title="Rimetti il nord in alto">
-    <div id="northArrow">&#9650;<span>N</span></div>
-  </div>
 
   <!-- Pannello ricerca avanzata -->
   <div id="searchPanel" class="bsheet" style="z-index:1296;max-height:70vh;">
@@ -167,12 +161,6 @@ ARRIVO</button>
       <span data-i18n="set.excludeGround">Escludi aerei a terra</span>
       <input type="checkbox" id="chkAirborne">
     </div>
-    <div class="switch">
-      <span data-i18n="set.compass">Orienta la mappa come guardi</span>
-      <input type="checkbox" id="chkCompass">
-    </div>
-    <div id="compassNote" style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.5px;"></div>
-    <div data-i18n="set.compassNote" style="font-size:9px;color:var(--muted);margin-top:2px;letter-spacing:0.5px;">Invece del nord in alto, ruota la mappa verso dove punti il telefono &#183; serve la bussola. Puoi anche ruotarla a due dita: il gesto ha la precedenza e spegne la bussola</div>
     <div class="switch">
       <span data-i18n="set.fires">Mostra incendi (rilevamenti satellitari)</span>
       <input type="checkbox" id="chkFires">

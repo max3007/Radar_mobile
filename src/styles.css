@@ -60,23 +60,6 @@
     }
     .leaflet-control-attribution a { color: var(--phosphor-dim) !important; }
 
-    /* Freccia del nord (modalita mappa orientata): sotto l'HUD a sinistra,
-       ruota per indicare sempre dove si trova il nord reale. Come su una
-       bussola vera, la lettera N gira insieme alla punta. */
-    #northNeedle {
-      position: fixed; left: 10px; top: 96px; z-index: 900; cursor: pointer;
-      width: 40px; height: 40px; border-radius: 50%;
-      background: rgba(6,10,14,0.72); border: 1px solid var(--phosphor-dim);
-      align-items: center; justify-content: center;
-    }
-    #northNeedle:active { background: rgba(52,224,138,0.25); }
-    #northArrow {
-      display: flex; flex-direction: column; align-items: center; line-height: 1;
-      color: var(--phosphor); font-size: 13px;
-      transform-origin: 50% 50%; transition: transform 0.12s linear;
-    }
-    #northArrow span { font-size: 8px; font-weight: 700; letter-spacing: 0.5px; margin-top: 1px; }
-
     #sweep { position: fixed; z-index: 500; pointer-events: none; transform: translate(-50%, -50%); }
     #sweep .cone {
       width: 100%; height: 100%; border-radius: 50%;
