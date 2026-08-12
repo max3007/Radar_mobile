@@ -64,11 +64,12 @@
        ruota per indicare sempre dove si trova il nord reale. Come su una
        bussola vera, la lettera N gira insieme alla punta. */
     #northNeedle {
-      position: fixed; left: 10px; top: 96px; z-index: 900; pointer-events: none;
+      position: fixed; left: 10px; top: 96px; z-index: 900; cursor: pointer;
       width: 40px; height: 40px; border-radius: 50%;
       background: rgba(6,10,14,0.72); border: 1px solid var(--phosphor-dim);
       align-items: center; justify-content: center;
     }
+    #northNeedle:active { background: rgba(52,224,138,0.25); }
     #northArrow {
       display: flex; flex-direction: column; align-items: center; line-height: 1;
       color: var(--phosphor); font-size: 13px;

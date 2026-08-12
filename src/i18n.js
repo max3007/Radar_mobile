@@ -37,7 +37,8 @@ const DICT = {
     'set.radius': 'RAGGIO DI RICERCA: {n} NM', 'set.passKm': 'PASSAGGI "IN ARRIVO" ENTRO: {n} km',
     'set.excludeGround': 'Escludi aerei a terra',
     'set.compass': 'Orienta la mappa come guardi',
-    'set.compassNote': 'Invece del nord in alto, ruota la mappa verso dove punti il telefono · serve la bussola',
+    'set.compassNote': 'Invece del nord in alto, ruota la mappa verso dove punti il telefono · serve la bussola. Puoi anche ruotarla a due dita: il gesto ha la precedenza e spegne la bussola',
+    'map.northUp': 'Rimetti il nord in alto',
     'set.fires': 'Mostra incendi (rilevamenti satellitari)',
     'set.firesNote': 'Dati EFFIS/Copernicus · rilevamenti degli ultimi giorni, aggiornati ogni poche ore',
     'set.burnt': 'Mostra aree bruciate (perimetri)',
@@ -148,7 +149,8 @@ const DICT = {
     'set.radius': 'SEARCH RADIUS: {n} NM', 'set.passKm': 'INBOUND PASSES WITHIN: {n} km',
     'set.excludeGround': 'Exclude aircraft on ground',
     'set.compass': 'Rotate map to where you look',
-    'set.compassNote': 'Instead of north-up, turns the map towards where you point the phone · needs the compass',
+    'set.compassNote': 'Instead of north-up, turns the map towards where you point the phone · needs the compass. You can also rotate it with two fingers: the gesture wins and turns the compass off',
+    'map.northUp': 'Reset north up',
     'set.fires': 'Show wildfires (satellite detections)',
     'set.firesNote': 'EFFIS/Copernicus data · detections of the last few days, refreshed every few hours',
     'set.burnt': 'Show burnt areas (perimeters)',
@@ -252,5 +254,12 @@ export function applyStaticI18n(root) {
   var phs = scope.querySelectorAll('[data-i18n-ph]');
   for (var j = 0; j < phs.length; j++) {
     phs[j].setAttribute('placeholder', t(phs[j].getAttribute('data-i18n-ph')));
+  }
+  // Tooltip / etichette accessibili
+  var tts = scope.querySelectorAll('[data-i18n-title]');
+  for (var k = 0; k < tts.length; k++) {
+    var lbl = t(tts[k].getAttribute('data-i18n-title'));
+    tts[k].setAttribute('title', lbl);
+    tts[k].setAttribute('aria-label', lbl);
   }
 }

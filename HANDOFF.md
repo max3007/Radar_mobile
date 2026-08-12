@@ -103,8 +103,8 @@ riconosce gli aerei antincendio (Canadair CL-215/CL-415, per codice tipo ICAO
 o descrizione) e li evidenzia con colore/icona dedicati; se rilevati vicino a
 un hotspot attivo (verifica via WMS GetFeatureInfo, best-effort) l'evidenza
 si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda) ·
-**mappa orientata come guardi** (bussola): interruttore in impostazioni che
-ruota la mappa verso dove punti il telefono, con freccia del nord.
+**mappa ruotabile**: "orienta la mappa come guardi" (bussola) da impostazioni
+e rotazione a due dita, con freccia del nord che rimette il nord in alto.
 
 ## DA VERIFICARE SUL CAMPO (non testabile in sandbox)
 
@@ -162,9 +162,18 @@ ruota la mappa verso dove punti il telefono, con freccia del nord.
   indicare la direzione reale; tutto il resto (aeroporti, targhetta, mirino)
   resta col default `false` e quindi dritto e leggibile. Non e una preferenza
   persistente ma una modalita come MIRA: al riavvio si riparte da nord in alto.
-- `touchRotate` e `shiftKeyRotate` sono spenti di proposito: la mappa ruota
-  solo dalla bussola, per non ruotare per sbaglio durante il pinch-zoom.
-  Se un domani si vuole la rotazione a due dita, basta `touchRotate: true`.
+- Si ruota in due modi e convivono: bussola e **due dita** (`touchRotate`).
+  Attenzione: in leaflet-rotate zoom e rotazione sono lo STESSO gesto a due
+  dita (`TouchGestures`), quindi ogni pinch-zoom ruota anche un po'. Per
+  questo il gesto spegne la bussola solo oltre `GESTURE_ROTATE_OFF` (10°):
+  sotto quella soglia e considerato torsione involontaria da pinch-zoom.
+  Durante il gesto la bussola e sospesa (`gestureBearing`) per non combattere
+  con le dita, e a fine gesto la rotazione scelta viene mantenuta
+  (`setMapCompass(false, keepBearing=true)`).
+- La freccia del nord e guidata dall'evento `rotate` della mappa (non dalla
+  bussola), quindi resta corretta anche a rotazione manuale; compare quando
+  il bearing non e 0 e toccandola si rimette il nord in alto.
+- `shiftKeyRotate` resta spento (e da desktop, non serve).
 - **Colori delle aree bruciate**: non li scegliamo noi, vengono dallo stile
   `default` di EFFIS e codificano l'ETA dell'incendio — rosso: ultime 24 ore;
   arancione: ultimi 7 giorni; blu: ultimi 90 giorni; verde: oltre 90 giorni.

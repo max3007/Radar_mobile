@@ -106,14 +106,13 @@ export function initApp() {
   document.getElementById('chkAirborne').checked = filterAirborne;
 
   // Attribuzione obbligatoria per le tile, in forma discreta.
-  // rotate: abilita la rotazione (leaflet-rotate). La pilotiamo noi dalla
-  // bussola (setMapCompass); touchRotate resta spento per non far ruotare la
-  // mappa per sbaglio durante il pinch-zoom.
+  // rotate: abilita la rotazione (leaflet-rotate). Si ruota in due modi, e
+  // convivono: dalla bussola (setMapCompass) o a due dita (touchRotate).
   var map = L.map('map', {
     zoomControl: false,
     attributionControl: true,
     rotate: true,
-    touchRotate: false,
+    touchRotate: true,
     shiftKeyRotate: false,
     rotateControl: false
   }).setView(CENTER, 8);
@@ -218,11 +217,13 @@ export function initApp() {
   var mcLastApplied = null;  // ultima prua realmente applicata alla mappa
 
   function applyBearing(deg) {
-    // setBearing(-prua): cosi la direzione in cui guardi finisce in alto
+    // setBearing(-prua): cosi la direzione in cui guardi finisce in alto.
+    // La freccia del nord si aggiorna da sola: setBearing emette 'rotate'.
     map.setBearing(-deg);
-    updateNorthNeedle(deg);
   }
   function onCompassForMap(e) {
+    // Due dita sulla mappa: comandi tu, la bussola si fa da parte
+    if (gestureBearing != null) return;
     var heading = null;
     if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
     else if (e.alpha != null) heading = 360 - e.alpha; // Android: alpha antiorario da Nord
@@ -256,7 +257,9 @@ export function initApp() {
   }
   // Non e una preferenza persistente ma una modalita che si accende quando sei
   // fuori a guardare il cielo, come MIRA: al riavvio riparte da "nord in alto".
-  function setMapCompass(on) {
+  // keepBearing: spegne l'inseguimento della bussola lasciando la mappa
+  // ruotata dov'e (serve quando sei tu a ruotarla a due dita).
+  function setMapCompass(on, keepBearing) {
     mapCompassOn = on;
     var note = document.getElementById('compassNote');
     if (on) {
@@ -280,17 +283,48 @@ export function initApp() {
     } else {
       detachMapCompass();
       mcSin = null; mcCos = null; mcLastApplied = null;
-      applyBearing(0); // torna a nord in alto
+      if (!keepBearing) applyBearing(0); // torna a nord in alto
     }
     document.getElementById('chkCompass').checked = mapCompassOn;
-    // La freccia del nord serve solo a mappa ruotata
-    document.getElementById('northNeedle').style.display = mapCompassOn ? 'flex' : 'none';
+    updateNorthNeedle();
   }
-  // Freccia che indica dove sta il nord quando la mappa e ruotata
-  function updateNorthNeedle(headingDeg) {
+  // Freccia che indica dove sta il nord quando la mappa e ruotata. Guidata
+  // dall'evento 'rotate' della mappa, quindi vale sia per la bussola sia per
+  // la rotazione a due dita. Toccarla rimette il nord in alto.
+  function updateNorthNeedle() {
+    var b = map.getBearing() || 0;
     var arrow = document.getElementById('northArrow');
-    if (arrow) arrow.style.transform = 'rotate(' + (-headingDeg) + 'deg)';
+    if (arrow) arrow.style.transform = 'rotate(' + b + 'deg)';
+    var rotated = Math.abs(((b % 360) + 360) % 360) > 0.5;
+    document.getElementById('northNeedle').style.display =
+      (mapCompassOn || rotated) ? 'flex' : 'none';
   }
+  map.on('rotate', updateNorthNeedle);
+  document.getElementById('northNeedle').addEventListener('click', function () {
+    // Ritorno rapido a "nord in alto": se stavi seguendo la bussola la spegne,
+    // altrimenti resterebbe a ruotare la mappa un istante dopo.
+    if (mapCompassOn) setMapCompass(false);
+    else { map.setBearing(0); updateNorthNeedle(); }
+  });
+
+  // Rotazione a due dita: durante il gesto la bussola resta ferma per non
+  // combattere con le dita. A fine gesto, se hai ruotato davvero (e non
+  // semplicemente pinch-zoomato con un filo di torsione) la modalita bussola
+  // si spegne e resti tu al comando, mantenendo la rotazione scelta.
+  var GESTURE_ROTATE_OFF = 10; // gradi oltre cui il gesto "vince" sulla bussola
+  var gestureBearing = null;
+  var mapEl = map.getContainer();
+  mapEl.addEventListener('touchstart', function (e) {
+    if (e.touches && e.touches.length === 2) gestureBearing = map.getBearing() || 0;
+  }, { passive: true });
+  mapEl.addEventListener('touchend', function (e) {
+    if (gestureBearing == null) return;
+    if (e.touches && e.touches.length > 0) return; // dita ancora sullo schermo
+    var moved = Math.abs((((map.getBearing() || 0) - gestureBearing + 540) % 360) - 180);
+    gestureBearing = null;
+    if (mapCompassOn && moved > GESTURE_ROTATE_OFF) setMapCompass(false, true);
+    updateNorthNeedle();
+  }, { passive: true });
   document.getElementById('chkCompass').addEventListener('change', function () {
     setMapCompass(this.checked);
   });
