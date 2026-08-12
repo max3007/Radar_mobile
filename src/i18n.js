@@ -12,6 +12,7 @@ const DICT = {
     'hud.drawError': 'ERRORE INTERNO · DATI RICEVUTI MA NON DISEGNATI',
     'err.offline': 'telefono offline',
     'err.blocked': 'connessione ok, richiesta bloccata',
+    'err.apiSaid': 'l\'API risponde: {msg}',
     'obs.locating': 'rilevo posizione…', 'obs.yourPos': 'la tua posizione',
     'obs.anzio': 'Anzio', 'obs.anzioNoGps': 'Anzio (GPS non disp.)', 'obs.anzioHttps': 'Anzio (serve HTTPS)',
     // FAB
@@ -132,6 +133,7 @@ const DICT = {
     'hud.drawError': 'INTERNAL ERROR · DATA RECEIVED BUT NOT DRAWN',
     'err.offline': 'phone offline',
     'err.blocked': 'connection ok, request blocked',
+    'err.apiSaid': 'API says: {msg}',
     'obs.locating': 'locating…', 'obs.yourPos': 'your position',
     'obs.anzio': 'Anzio', 'obs.anzioNoGps': 'Anzio (no GPS)', 'obs.anzioHttps': 'Anzio (needs HTTPS)',
     'fab.above': 'ABOVE\nYOU', 'fab.arriving': 'IN-\nBOUND', 'fab.mira': 'AIM',

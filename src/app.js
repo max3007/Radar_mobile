@@ -1520,10 +1520,12 @@ export function initApp() {
   // distingue un problema di rete da un rifiuto del server (es. HTTP 429).
   var failStreak = 0;
   var lastErrWhy = null;
-  function showNetError(why) {
+  function showNetError(why, immediate) {
     failStreak++;
     lastErrWhy = why;
-    if (failStreak < 2) return;
+    // immediate: quando e il server a dire esplicitamente cosa non va, non ha
+    // senso aspettare la conferma di un secondo tentativo.
+    if (!immediate && failStreak < 2) return;
     errBar.textContent = t('hud.signalLostWhy', { why: why });
     errBar.style.display = 'block';
   }
@@ -1559,6 +1561,14 @@ export function initApp() {
       return;
     }
     if (seq !== fetchSeq) return; // risposta superata da una piu recente: scarta
+    // L'API puo rispondere con successo ma con un corpo di errore: e cosi che
+    // airplanes.live comunica di aver bloccato il client
+    // ({"error": "please contact us at ..."}). Senza questo controllo l'app
+    // mostrava solo zero contatti, senza dire perche.
+    if (data && data.error) {
+      showNetError(t('err.apiSaid', { msg: String(data.error).slice(0, 90) }), true);
+      return;
+    }
     lastAircraft = data.ac || [];
     clearNetError();
 
