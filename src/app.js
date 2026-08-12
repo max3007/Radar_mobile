@@ -94,6 +94,7 @@ export function initApp() {
       savePrefs(buildPrefs());
       // Ridisegna le parti dinamiche gia visibili nella nuova lingua
       updateHudFilters();
+      refreshErrBar();
       if (selectedAc) { updateTag(selectedAc); if (document.getElementById('sheet').classList.contains('full')) fillSheet(selectedAc); }
       refreshBoard();
       renderSearchResults();
@@ -1178,7 +1179,7 @@ export function initApp() {
     if (!isPassesOpen()) return;
     var seq = ++passScanSeq;
     try {
-      var res = await fetch(API.planesPoint + CENTER[0] + '/' + CENTER[1] + '/' + PASS_SCAN_NM);
+      var res = await apiFetch(API.planesPoint + CENTER[0] + '/' + CENTER[1] + '/' + PASS_SCAN_NM);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var data = await res.json();
       if (seq !== passScanSeq || !isPassesOpen()) return;
@@ -1497,15 +1498,68 @@ export function initApp() {
 
   // ---------- Rete ----------
   var errBar = document.getElementById('errBar');
+
+  // L'API pubblica degli aerei accetta circa UNA richiesta al secondo. L'app
+  // pero ne fa partire due ravvicinate ogni volta che il pannello IN ARRIVO e
+  // aperto (polling nel raggio + scansione a 250 NM), e la seconda veniva
+  // rifiutata: in app si vedeva "SEGNALE PERSO" senza motivo apparente.
+  // Qui le mettiamo in fila, prenotando a ciascuna il suo turno.
+  var API_MIN_GAP_MS = 1100;
+  var nextApiSlot = 0;
+  function apiFetch(url) {
+    var now = Date.now();
+    var slot = Math.max(now, nextApiSlot);
+    nextApiSlot = slot + API_MIN_GAP_MS;
+    var wait = slot - now;
+    var ready = wait > 0 ? new Promise(function (r) { setTimeout(r, wait); }) : Promise.resolve();
+    return ready.then(function () { return fetch(url); });
+  }
+
+  // Un buco isolato (galleria, cambio cella) non merita un allarme: il banner
+  // compare dal secondo fallimento di fila. Mostra anche il PERCHE, cosi si
+  // distingue un problema di rete da un rifiuto del server (es. HTTP 429).
+  var failStreak = 0;
+  var lastErrWhy = null;
+  function showNetError(why) {
+    failStreak++;
+    lastErrWhy = why;
+    if (failStreak < 2) return;
+    errBar.textContent = t('hud.signalLostWhy', { why: why });
+    errBar.style.display = 'block';
+  }
+  function clearNetError() {
+    failStreak = 0;
+    lastErrWhy = null;
+    errBar.style.display = 'none';
+  }
+  // Ridisegna il banner nella lingua giusta se la si cambia mentre e visibile
+  function refreshErrBar() {
+    if (lastErrWhy != null && errBar.style.display === 'block') {
+      errBar.textContent = t('hud.signalLostWhy', { why: lastErrWhy });
+    }
+  }
   async function fetchPlanes() {
     var seq = ++fetchSeq;
+    var data;
+    // Fase 1: la rete. Solo qui un errore significa davvero "segnale perso".
     try {
-      var res = await fetch(API.planesPoint + CENTER[0] + '/' + CENTER[1] + '/' + radiusNM);
+      var res = await apiFetch(API.planesPoint + CENTER[0] + '/' + CENTER[1] + '/' + radiusNM);
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      var data = await res.json();
-      if (seq !== fetchSeq) return; // risposta superata da una piu recente: scarta
-      lastAircraft = data.ac || [];
-      errBar.style.display = 'none';
+      data = await res.json();
+    } catch (e) {
+      if (seq !== fetchSeq) return;
+      // Distingue il rifiuto del server (HTTP nnn) dalla rete irraggiungibile
+      showNetError(/^HTTP /.test(e.message) ? e.message : t('err.network'));
+      return;
+    }
+    if (seq !== fetchSeq) return; // risposta superata da una piu recente: scarta
+    lastAircraft = data.ac || [];
+    clearNetError();
+
+    // Fase 2: il disegno. Un errore qui e un bug nostro, non un problema di
+    // segnale: va segnalato in modo diverso, altrimenti si cerca la causa
+    // dalla parte sbagliata (e resta invisibile nella console).
+    try {
       drawPlanes(lastAircraft);
       refreshBoard(); // aggiorna lista aerei + classifica se il pannello e aperto
       refreshPasses(); // aggiorna "IN ARRIVO" e proiezioni se il pannello e aperto
@@ -1528,7 +1582,9 @@ export function initApp() {
         if (!found) closeSheet();
       }
     } catch (e) {
-      if (seq !== fetchSeq) return;
+      console.error('RADAR: errore durante il disegno', e);
+      lastErrWhy = null;
+      errBar.textContent = t('hud.drawError');
       errBar.style.display = 'block';
     }
   }
@@ -1713,7 +1769,7 @@ export function initApp() {
     var cs = toCallsign(raw);
     note.textContent = t('search.searching', { cs: cs });
     try {
-      var res = await fetch(API.planesCallsign + encodeURIComponent(cs));
+      var res = await apiFetch(API.planesCallsign + encodeURIComponent(cs));
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var data = await res.json();
       var list = (data.ac || []).filter(function (a) { return a.lat != null && a.lon != null; });

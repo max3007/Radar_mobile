@@ -155,6 +155,19 @@ e rotazione a due dita, con freccia del nord che rimette il nord in alto.
 - `nextPass` (CPA) assume rotta/velocità costanti: affidabile ~30 min, per
   questo l'orizzonte è breve e la lista si aggiorna ogni 12 s.
 - Il polling si ferma in background (`visibilitychange`) per risparmiare.
+- **L'API aerei accetta ~1 richiesta al secondo.** L'app pero ne fa partire
+  due ravvicinate quando IN ARRIVO e aperto (polling nel raggio + scansione a
+  250 NM, chiamata da `refreshPasses` dentro `fetchPlanes`): la seconda veniva
+  rifiutata e in app si leggeva "SEGNALE PERSO" senza motivo apparente. Ora
+  tutte le chiamate a quell'API passano da `apiFetch`, che prenota a ciascuna
+  un turno a distanza di `API_MIN_GAP_MS` (1,1 s). Se in futuro si aggiungono
+  chiamate a `api.airplanes.live`, vanno fatte con `apiFetch`, non con `fetch`.
+- **Il banner rosso distingue tre casi diversi**: rete irraggiungibile,
+  rifiuto del server (mostra il codice, es. HTTP 429) ed errore di disegno
+  ("ERRORE INTERNO"). Prima qualsiasi eccezione JS nel rendering finiva nello
+  stesso `catch` della rete e si leggeva "segnale perso": si finiva a cercare
+  un problema di connessione mentre era un bug nostro. Il banner compare dal
+  SECONDO fallimento di fila, cosi un buco isolato non allarma.
 - **Mappa orientata**: la rotazione la fa `leaflet-rotate` (`map.setBearing`),
   la prua stabile la calcoliamo noi (media circolare su sin/cos, come MIRA).
   `setBearing(-prua)`: il segno meno porta in alto la direzione in cui guardi.
