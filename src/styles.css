@@ -30,25 +30,6 @@
       font-size: 11px; letter-spacing: 1px; text-align: center;
       padding: 5px; display: none;
     }
-    #obsBar {
-      position: fixed; left: 0; right: 0; z-index: 1185;
-      top: calc(env(safe-area-inset-top) + 44px);
-      background: rgba(10,40,50,0.92); color: #bfeaff;
-      font-size: 11px; letter-spacing: 1px; text-align: center;
-      padding: 5px; display: none;
-    }
-    .user-dot {
-      width: 14px; height: 14px; border-radius: 50%;
-      background: #6fd3ff; border: 2px solid #f2fff8;
-      box-shadow: 0 0 0 rgba(111,211,255,0.5);
-      animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-      0% { box-shadow: 0 0 0 0 rgba(111,211,255,0.5); }
-      70% { box-shadow: 0 0 0 14px rgba(111,211,255,0); }
-      100% { box-shadow: 0 0 0 0 rgba(111,211,255,0); }
-    }
-    .fab.active { background: rgba(111,211,255,0.15); border-color: #6fd3ff; color: #6fd3ff; }
 
     #map { position: fixed; inset: 0; z-index: 1; background: #2a3138; }
     .leaflet-container { background: var(--bg); font-family: var(--mono); }
@@ -121,7 +102,6 @@
       top: 0; bottom: 0; max-height: none; border-radius: 0;
       border-top: none; padding-top: calc(env(safe-area-inset-top) + 16px);
     }
-    #sheet.full .grab { display: none; }
     #closeFull {
       display: none; position: absolute; top: calc(env(safe-area-inset-top) + 10px); right: 14px;
       width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
@@ -129,17 +109,6 @@
       font-family: var(--mono); z-index: 5; line-height: 1;
     }
     #sheet.full #closeFull { display: block; }
-    #sheet.mini #photoWrap,
-    #sheet.mini #photoNote,
-    #sheet.mini #shHeader,
-    #sheet.mini #routeBox,
-    #sheet.mini #routeNote,
-    #sheet.mini #shPhase,
-    #sheet.mini #techGrid,
-    #sheet.mini #shDesc,
-    #sheet.mini .grid,
-    #sheet.mini #shReg { display: none !important; }
-    #sheet.mini #miniLine { display: block !important; }
     #board { z-index: 1290; max-height: 60vh; }
     #settings { z-index: 1295; }
 
@@ -194,7 +163,6 @@
     #settings label { display: block; font-size: 10px; color: var(--muted); letter-spacing: 1px; margin: 14px 0 6px; }
     #settings label:first-of-type { margin-top: 0; }
     #settings input[type=range] { width: 100%; accent-color: var(--phosphor); }
-    #radiusVal { color: var(--phosphor); font-weight: 700; }
     .switch { display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin-top: 14px; }
     .switch input { width: 20px; height: 20px; accent-color: var(--phosphor); }
     #applyBtn {

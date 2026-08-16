@@ -606,8 +606,6 @@ export function initApp() {
     if (!r) {
       document.getElementById('routeBox').style.display = 'none';
       document.getElementById('routeNote').textContent = t('route.noneForFlight');
-      document.getElementById('miniOrig').textContent = '?';
-      document.getElementById('miniDest').textContent = '?';
       clearRouteLine();
       if (ac && selected === ac.hex && tagMarker) updateTag(ac);
       return;
@@ -620,11 +618,6 @@ export function initApp() {
       document.getElementById('routeBox').style.display = 'none';
       document.getElementById('routeNote').textContent =
         t('route.inconsistent', { lbl: lbl });
-      document.getElementById('miniOrig').textContent = '?';
-      document.getElementById('miniDest').textContent = '?';
-      var mfi = document.getElementById('miniFlight');
-      var numi = fmtFlight(r.flightIata);
-      if (numi) { mfi.textContent = numi; mfi.dataset.iata = '1'; }
       clearRouteLine();
       if (selected === ac.hex && tagMarker) updateTag(ac);
       return;
@@ -634,13 +627,6 @@ export function initApp() {
     document.getElementById('rOrigIata').textContent = r.orig.iata || r.orig.icao || '';
     document.getElementById('rDestCity').textContent = r.dest.city || r.dest.name || '--';
     document.getElementById('rDestIata').textContent = r.dest.iata || r.dest.icao || '';
-    // Destinazione e partenza nella riga compatta
-    document.getElementById('miniOrig').textContent = r.orig.city || r.orig.iata || r.orig.icao || '?';
-    document.getElementById('miniDest').textContent = r.dest.city || r.dest.iata || r.dest.icao || '?';
-    // Numero volo commerciale (IATA) al posto del callsign
-    var miniF = document.getElementById('miniFlight');
-    var num = fmtFlight(r.flightIata);
-    if (num) { miniF.textContent = num; miniF.dataset.iata = '1'; }
     document.getElementById('routeBox').style.display = 'block';
     currentRoute = r;
     if (ac && ac.lat != null) drawRouteLine(ac);
@@ -770,24 +756,6 @@ export function initApp() {
     var model = ac.desc || ac.t || '';
     modelEl.textContent = model || t('sh.unknownType');
     modelEl.style.display = model ? 'block' : 'none';
-    // Riga compatta: compagnia + dati che si aggiornano ad ogni refresh
-    document.getElementById('miniAirline').textContent = airlineName(ac.flight).toUpperCase();
-    // Ripiego numero volo = callsign, finche showRoute non fornisce il numero IATA
-    var miniF = document.getElementById('miniFlight');
-    if (!miniF.dataset.iata) miniF.textContent = (ac.flight || '').trim() || ac.hex.toUpperCase();
-    document.getElementById('miniAlt').textContent = altLabel(ac);
-    document.getElementById('miniSpd').textContent = ac.gs != null ? Math.round(ac.gs) + ' kt' : '--';
-    // Tipo aereo nella riga mini
-    document.getElementById('miniModel').textContent = ac.desc || ac.t || t('sh.unknownType');
-    // Distanza e direzione da Anzio nella riga mini
-    if (ac.lat != null && ac.lon != null) {
-      var mkm = map.distance([ac.lat, ac.lon], CENTER) / 1000;
-      document.getElementById('miniDist').textContent = mkm.toFixed(0) + ' km ' + compass(bearingFromCenter(CENTER, ac.lat, ac.lon));
-    } else {
-      document.getElementById('miniDist').textContent = '--';
-    }
-    // Fase di volo nella riga mini
-    document.getElementById('miniPhase').textContent = flightPhase(ac) || '';
     document.getElementById('shAlt').textContent = altLabel(ac);
     document.getElementById('shSpd').textContent = ac.gs != null ? Math.round(ac.gs) + ' kt' : '--';
     document.getElementById('shTrk').textContent = ac.track != null ? Math.round(ac.track) + '\u00B0 ' + compass(ac.track) : '--';
@@ -881,8 +849,10 @@ export function initApp() {
     var prev = selected;
     selected = ac.hex;
     selectedAc = ac;
+    var cambiatoAereo = (prev !== ac.hex);
     // Cambio aereo: azzera la rotta tracciata del precedente
-    if (prev !== ac.hex) { clearRouteLine(); currentRoute = null; }
+    // (clearRouteLine azzera gia currentRoute)
+    if (cambiatoAereo) clearRouteLine();
     document.getElementById('board').classList.remove('open');
     document.getElementById('settings').classList.remove('open');
     updateTag(ac);
@@ -891,19 +861,15 @@ export function initApp() {
     var cs = (ac.flight || '').trim();
     if (cs && !(cs in routeCache)) loadRoute(ac);
     else if (cs && routeCache[cs]) showRoute(routeCache[cs], ac);
-    if (prev !== selected) updateSelectedIcons(prev, selected);
+    if (cambiatoAereo) updateSelectedIcons(prev, selected);
     drawPlanes(lastAircraft); // riapplica attenuazione agli altri
   }
   // Espande alla scheda a tutto schermo
   function openFull() {
     if (!selectedAc) return;
     var ac = selectedAc;
-    var mf = document.getElementById('miniFlight'); delete mf.dataset.iata;
-    document.getElementById('miniOrig').textContent = '\u2026';
-    document.getElementById('miniDest').textContent = '\u2026';
     fillSheet(ac);
     var s = document.getElementById('sheet');
-    s.classList.remove('mini');
     s.classList.add('open', 'full');
     loadPhoto(ac.hex, ac.r);
     // Rotta: usa cache se presente, altrimenti caricala
@@ -1278,7 +1244,8 @@ export function initApp() {
     bar.textContent = t('alert.incoming', { flight: flight, when: (mins <= 0 ? t('arr.now') : t('arr.inMin', { n: mins })), km: km, dir: compass(pass.brgAtPass) });
     bar.style.display = 'block';
     bar.onclick = function () { bar.style.display = 'none'; pickAndClose(ac); };
-    if (navigator.vibrate) { try { navigator.vibrate([200, 100, 200]); } catch (e) {} }
+    // Alcuni browser espongono vibrate ma la negano senza gesto dell'utente
+    if (navigator.vibrate) { try { navigator.vibrate([200, 100, 200]); } catch (e) { /* niente vibrazione */ } }
     beep();
     if (alertHideTimer) clearTimeout(alertHideTimer);
     alertHideTimer = setTimeout(function () { bar.style.display = 'none'; }, 10000);
