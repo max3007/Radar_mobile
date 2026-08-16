@@ -102,15 +102,15 @@
 
   <!-- Ordine per frequenza d'uso: azioni rare in alto, frequenti in basso a portata di pollice -->
   <div id="fabs">
-    <button class="fab" id="btnSettings" title="Impostazioni" aria-label="Impostazioni">&#9881;</button>
-    <button class="fab" id="btnBoard" title="Classifica compagnie" aria-label="Classifica compagnie">&#9776;</button>
-    <button class="fab" id="btnSearch" title="Cerca aereo" aria-label="Cerca aereo">&#128269;</button>
-    <button class="fab small" id="btnAbove" data-i18n="fab.above" title="Sopra di te" aria-label="Aereo piu vicino">SOPRA
+    <button class="fab" id="btnSettings" data-i18n-title="fab.settingsT" title="Impostazioni" aria-label="Impostazioni">&#9881;</button>
+    <button class="fab" id="btnBoard" data-i18n-title="fab.boardT" title="Classifica compagnie" aria-label="Classifica compagnie">&#9776;</button>
+    <button class="fab" id="btnSearch" data-i18n-title="fab.searchT" title="Cerca aereo" aria-label="Cerca aereo">&#128269;</button>
+    <button class="fab small" id="btnAbove" data-i18n="fab.above" data-i18n-title="fab.aboveT" title="Sopra di te" aria-label="Aereo piu vicino">SOPRA
 DI TE</button>
-    <button class="fab small" id="btnPasses" data-i18n="fab.arriving" title="Prossimi passaggi previsti" aria-label="Aerei in arrivo">IN
+    <button class="fab small" id="btnPasses" data-i18n="fab.arriving" data-i18n-title="fab.arrivingT" title="Prossimi passaggi previsti" aria-label="Aerei in arrivo">IN
 ARRIVO</button>
-    <button class="fab small" id="btnMira" data-i18n="fab.mira" title="Punta verso l'aereo selezionato" aria-label="Bussola verso l'aereo">MIRA</button>
-    <button class="fab" id="btnCenter" title="Centra" aria-label="Centra la mappa">&#8853;</button>
+    <button class="fab small" id="btnMira" data-i18n="fab.mira" data-i18n-title="fab.miraT" title="Punta verso l'aereo selezionato" aria-label="Bussola verso l'aereo">MIRA</button>
+    <button class="fab" id="btnCenter" data-i18n-title="fab.centerT" title="Centra" aria-label="Centra la mappa">&#8853;</button>
   </div>
 
   <div id="board" class="bsheet">
@@ -206,7 +206,7 @@ ARRIVO</button>
 
   <div id="sheet" class="bsheet">
     <div class="grab"></div>
-    <button id="closeFull" aria-label="Chiudi">&#10005;</button>
+    <button id="closeFull" data-i18n-title="sh.closeT" aria-label="Chiudi">&#10005;</button>
     <button id="followBtn" aria-label="Avvisami al passaggio" title="Avvisami quando passa vicino">&#128276;</button>
     <div id="miniLine" style="display:none;padding-right:36px;">
       <div style="font-size:13px;">
@@ -229,7 +229,7 @@ ARRIVO</button>
       <div id="shAirline">--</div>
       <div id="shModel">--</div>
     </div>
-    <div id="photoWrap"><img id="photo" alt="Foto aereo"><div id="photoCredit"></div></div>
+    <div id="photoWrap"><img id="photo" data-i18n-alt="sh.photoAlt" alt="Foto aereo"><div id="photoCredit"></div></div>
     <div id="photoNote" style="font-size:10px;color:var(--muted);margin-bottom:8px;"></div>
     <div id="routeBox" style="display:none;margin-top:12px;padding:10px;background:rgba(255,180,84,0.06);border:1px solid var(--line);border-radius:8px;">
       <div id="rFlight" style="font-size:20px;font-weight:700;color:var(--amber);text-align:center;letter-spacing:1px;">--</div>

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import {
   airlineName, toCallsign, fmtFlight, altColor, planeColor, compass,
   bearingBetween, bearingFromCenter, elevationAngle, destPoint,
-  emergencyInfo, flightPhase, routeConsistent, nextPass, landingBeforePass,
+  emergencyInfo, flightPhase, flightPhaseInfo, routeConsistent, nextPass, landingBeforePass,
   isOnGround, altLabel, isFirefightingAircraft
 } from '../src/domain.js';
 import { setLang } from '../src/i18n.js';
@@ -360,5 +360,50 @@ describe('flightPhase con falsi ground', () => {
   });
   it('ground fermo -> A TERRA', () => {
     expect(flightPhase({ alt_baro: 'ground', gs: 5 })).toBe('A TERRA');
+  });
+});
+
+describe('flightPhaseInfo (codice separato dal testo)', () => {
+  // Il codice serve a decidere (che icona mostrare), il testo solo a
+  // scrivere a schermo. Se li si confonde, la logica smette di funzionare
+  // appena l'utente cambia lingua: era il caso dell'icona di fase.
+  it('restituisce un codice stabile accanto al testo tradotto', () => {
+    expect(flightPhaseInfo({ alt_baro: 12000, baro_rate: 1500 }).code).toBe('climb');
+    expect(flightPhaseInfo({ alt_baro: 20000, baro_rate: -1000 }).code).toBe('descent');
+    expect(flightPhaseInfo({ alt_baro: 36000, baro_rate: 0 }).code).toBe('cruise');
+    expect(flightPhaseInfo({ alt_baro: 'ground', gs: 5 }).code).toBe('ground');
+    expect(flightPhaseInfo({ alt_baro: 12000, baro_rate: 0 }).code).toBe('level');
+    expect(flightPhaseInfo({ alt_baro: 3000, nav_modes: ['approach'] }).code).toBe('approach');
+  });
+  it('il codice NON cambia con la lingua, il testo si', () => {
+    const ac = { alt_baro: 12000, baro_rate: 1500 };
+    setLang('it');
+    const it = flightPhaseInfo(ac);
+    setLang('en');
+    const en = flightPhaseInfo(ac);
+    setLang('it');
+    expect(en.code).toBe(it.code);
+    expect(en.text).not.toBe(it.text);
+  });
+  it('flightPhase resta e restituisce solo il testo', () => {
+    expect(flightPhase({ alt_baro: 12000, baro_rate: 1500 })).toBe('IN SALITA');
+  });
+});
+
+describe('airlineName traduce "Privato"', () => {
+  it('senza callsign usa la traduzione, non una stringa fissa', () => {
+    setLang('en');
+    expect(airlineName('')).toBe('Private');
+    expect(airlineName('12345')).toBe('Private');
+    setLang('it');
+    expect(airlineName('')).toBe('Privato');
+  });
+  it('non si fa ombreggiare la funzione di traduzione', () => {
+    // La variabile locale dentro airlineName si chiamava `t` come la
+    // funzione di traduzione: qualsiasi t('...') li dentro esplodeva.
+    setLang('en');
+    expect(() => airlineName('RYR1WX')).not.toThrow();
+    expect(airlineName('RYR1WX')).toBe('Ryanair');
+    setLang('it');
   });
 });

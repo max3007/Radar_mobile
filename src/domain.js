@@ -7,15 +7,18 @@ import IATA2ICAO from './data/iata2icao.json';
 import { t, compassDirs } from './i18n.js';
 
 export function airlineName(cs) {
-  if (!cs) return "Privato";
-  var t = cs.trim().toUpperCase();
-  var code = t.substring(0, 3);
+  // NB: la variabile locale si chiama `sigla` e non `t` di proposito — `t` e
+  // la funzione di traduzione importata sopra, e ombreggiarla qui impediva
+  // di tradurre "Privato" senza accorgersene.
+  if (!cs) return t('airline.private');
+  var sigla = cs.trim().toUpperCase();
+  var code = sigla.substring(0, 3);
   if (AIRLINES[code]) {
     var name = AIRLINES[code];
     // Accorcia nomi molto lunghi per non rompere il layout su mobile
     return name.length > 26 ? name.substring(0, 24).trim() + '…' : name;
   }
-  return /^[A-Z]{3}/.test(t) ? code : "Privato";
+  return /^[A-Z]{3}/.test(sigla) ? code : t('airline.private');
 }
 
 // Converte un numero di volo commerciale (IATA, es. AZ610) in callsign ICAO
@@ -258,23 +261,40 @@ export function emergencyInfo(ac) {
   return map[e] ? t(map[e]) : t('em.other', { e: e.toUpperCase() });
 }
 
-// Fase di volo dedotta da modi di navigazione, vario e quota
-export function flightPhase(ac) {
+// Fase di volo dedotta da modi di navigazione, vario e quota.
+// Restituisce un CODICE stabile ('climb', 'descent'...) oltre al testo
+// tradotto: il codice serve a chi deve prendere decisioni (che icona
+// mostrare), il testo solo a chi deve scriverlo a schermo. Tenerli separati
+// evita di far dipendere la logica dalla lingua scelta dall'utente — errore
+// che rendeva l'icona di fase muta con l'app in inglese.
+// { code, text }
+export function flightPhaseInfo(ac) {
   var modes = ac.nav_modes || [];
-  if (isOnGround(ac)) return t('phase.ground');
-  if (modes.indexOf('approach') !== -1) return t('phase.approach');
+  if (isOnGround(ac)) return { code: 'ground', text: t('phase.ground') };
+  if (modes.indexOf('approach') !== -1) return { code: 'approach', text: t('phase.approach') };
   var vr = ac.baro_rate != null ? ac.baro_rate : ac.geom_rate;
   if (vr != null && vr > 300) {
     var tgt = ac.nav_altitude_mcp;
-    if (tgt && typeof ac.alt_baro === 'number') return t('phase.climbTo', { fl: Math.round(tgt / 100) });
-    return t('phase.climb');
+    if (tgt && typeof ac.alt_baro === 'number') {
+      return { code: 'climb', text: t('phase.climbTo', { fl: Math.round(tgt / 100) }) };
+    }
+    return { code: 'climb', text: t('phase.climb') };
   }
   if (vr != null && vr < -300) {
-    if (typeof ac.alt_baro === 'number' && ac.alt_baro < 10000) return t('phase.descentArr');
-    return t('phase.descent');
+    if (typeof ac.alt_baro === 'number' && ac.alt_baro < 10000) {
+      return { code: 'descent', text: t('phase.descentArr') };
+    }
+    return { code: 'descent', text: t('phase.descent') };
   }
-  if (typeof ac.alt_baro === 'number' && ac.alt_baro > 24000) return t('phase.cruise');
+  if (typeof ac.alt_baro === 'number' && ac.alt_baro > 24000) {
+    return { code: 'cruise', text: t('phase.cruise') };
+  }
   // Flag 'ground' ma in volo (velocita alta): e basso, tipicamente in manovra
-  if (isGroundAlt(ac.alt_baro)) return t('phase.approach');
-  return t('phase.level');
+  if (isGroundAlt(ac.alt_baro)) return { code: 'approach', text: t('phase.approach') };
+  return { code: 'level', text: t('phase.level') };
+}
+
+// Solo il testo, per chi deve unicamente scriverlo a schermo
+export function flightPhase(ac) {
+  return flightPhaseInfo(ac).text;
 }

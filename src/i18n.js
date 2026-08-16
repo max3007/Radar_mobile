@@ -18,6 +18,11 @@ const DICT = {
     'attr.flightData': 'voli: {src}',
     'set.diag': 'DIAGNOSTICA',
     'diag.ok': 'ok, {n} aerei',
+    'airline.private': 'Privato', 'airline.all': 'Tutte',
+    'fab.settingsT': 'Impostazioni', 'fab.boardT': 'Classifica compagnie',
+    'fab.searchT': 'Cerca aereo', 'fab.aboveT': 'Aereo piu vicino',
+    'fab.arrivingT': 'Prossimi passaggi previsti', 'fab.miraT': 'Punta verso l\'aereo selezionato',
+    'fab.centerT': 'Centra la mappa', 'sh.closeT': 'Chiudi', 'sh.photoAlt': 'Foto aereo',
     'obs.locating': 'rilevo posizione…', 'obs.yourPos': 'la tua posizione',
     'obs.anzio': 'Anzio', 'obs.anzioNoGps': 'Anzio (GPS non disp.)', 'obs.anzioHttps': 'Anzio (serve HTTPS)',
     // FAB
@@ -64,7 +69,7 @@ const DICT = {
     'loc.placeError': 'Ricerca non riuscita ({msg})', 'loc.defaultName': 'Postazione {n}',
     'loc.deleteQ': 'Eliminare la postazione\n«{name}»?', 'loc.thisOne': 'questa postazione',
     // Scheda dettaglio
-    'sh.unknownType': 'Tipo sconosciuto', 'sh.onGroundShort': 'A terra',
+    'sh.unknownType': 'Tipo sconosciuto',
     'cell.alt': 'QUOTA', 'cell.speed': 'VELOCITA', 'cell.track': 'ROTTA', 'cell.vario': 'VARIO',
     'cell.mach': 'MACH', 'cell.roll': 'ASSETTO', 'cell.wind': 'VENTO', 'cell.oat': 'TEMP EST.',
     'vario.level': '→ livellato', 'roll.left': '↰ sx {n}°', 'roll.right': '↱ dx {n}°', 'roll.straight': 'dritto',
@@ -141,6 +146,11 @@ const DICT = {
     'attr.flightData': 'flights: {src}',
     'set.diag': 'DIAGNOSTICS',
     'diag.ok': 'ok, {n} aircraft',
+    'airline.private': 'Private', 'airline.all': 'All',
+    'fab.settingsT': 'Settings', 'fab.boardT': 'Airline ranking',
+    'fab.searchT': 'Find aircraft', 'fab.aboveT': 'Nearest aircraft',
+    'fab.arrivingT': 'Next predicted passes', 'fab.miraT': 'Point at the selected aircraft',
+    'fab.centerT': 'Centre the map', 'sh.closeT': 'Close', 'sh.photoAlt': 'Aircraft photo',
     'obs.locating': 'locating…', 'obs.yourPos': 'your position',
     'obs.anzio': 'Anzio', 'obs.anzioNoGps': 'Anzio (no GPS)', 'obs.anzioHttps': 'Anzio (needs HTTPS)',
     'fab.above': 'ABOVE\nYOU', 'fab.arriving': 'IN-\nBOUND', 'fab.mira': 'AIM',
@@ -180,7 +190,7 @@ const DICT = {
     'loc.ready': 'Place ready: tap "+ SAVE HERE" to store it',
     'loc.placeError': 'Search failed ({msg})', 'loc.defaultName': 'Location {n}',
     'loc.deleteQ': 'Delete the location\n"{name}"?', 'loc.thisOne': 'this location',
-    'sh.unknownType': 'Unknown type', 'sh.onGroundShort': 'On ground',
+    'sh.unknownType': 'Unknown type',
     'cell.alt': 'ALTITUDE', 'cell.speed': 'SPEED', 'cell.track': 'TRACK', 'cell.vario': 'V/S',
     'cell.mach': 'MACH', 'cell.roll': 'ATTITUDE', 'cell.wind': 'WIND', 'cell.oat': 'OAT',
     'vario.level': '→ level', 'roll.left': '↰ left {n}°', 'roll.right': '↱ right {n}°', 'roll.straight': 'wings level',
@@ -268,5 +278,21 @@ export function applyStaticI18n(root) {
   var phs = scope.querySelectorAll('[data-i18n-ph]');
   for (var j = 0; j < phs.length; j++) {
     phs[j].setAttribute('placeholder', t(phs[j].getAttribute('data-i18n-ph')));
+  }
+  // Suggerimenti ed etichette accessibili: senza questo restavano in italiano
+  // anche con l'app in inglese, perche nessuno li traduceva.
+  var tt = scope.querySelectorAll('[data-i18n-title]');
+  for (var k = 0; k < tt.length; k++) {
+    var lbl = t(tt[k].getAttribute('data-i18n-title'));
+    tt[k].setAttribute('title', lbl);
+    if (!tt[k].hasAttribute('data-i18n-aria')) tt[k].setAttribute('aria-label', lbl);
+  }
+  var ar = scope.querySelectorAll('[data-i18n-aria]');
+  for (var m = 0; m < ar.length; m++) {
+    ar[m].setAttribute('aria-label', t(ar[m].getAttribute('data-i18n-aria')));
+  }
+  var al = scope.querySelectorAll('[data-i18n-alt]');
+  for (var n = 0; n < al.length; n++) {
+    al[n].setAttribute('alt', t(al[n].getAttribute('data-i18n-alt')));
   }
 }

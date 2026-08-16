@@ -11,11 +11,11 @@ import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, 
 var SRC = PLANES_SOURCES[PLANES_SOURCE];
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
-  airlineName, toCallsign, fmtFlight, altColor, planeColor, altLabel, isOnGround, compass,
-  bearingFromCenter, elevationAngle, emergencyInfo, flightPhase,
+  airlineName, toCallsign, fmtFlight, planeColor, altLabel, isOnGround, compass,
+  bearingFromCenter, elevationAngle, emergencyInfo, flightPhase, flightPhaseInfo,
   routeConsistent, nextPass, landingBeforePass, isFirefightingAircraft
 } from './domain.js';
-import { t, setLang, getLang, detectLang, applyStaticI18n } from './i18n.js';
+import { t, setLang, detectLang, applyStaticI18n } from './i18n.js';
 import AIRPORTS from './data/airports.json';
 
 var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
@@ -95,6 +95,22 @@ export function initApp() {
     document.getElementById('radiusLabel').textContent = t('set.radius', { n: radiusNM });
     document.getElementById('passKmLabel').textContent = t('set.passKm', { n: passKm });
   }
+  // Tutto cio che l'app SCRIVE da sola va ridisegnato quando cambia la lingua:
+  // applyStaticI18n copre solo il markup di partenza, non il testo generato a
+  // runtime. Chi aggiunge una nuova parte dinamica la aggiunge QUI, in un
+  // posto solo, invece di scoprire mesi dopo che resta nella lingua vecchia.
+  function ridisegnaTestiDinamici() {
+    updateHudFilters();
+    refreshErrBar();
+    renderLocations();          // chip delle postazioni
+    refreshBoard();             // lista aerei + classifica compagnie
+    renderSearchResults();      // risultati della ricerca
+    if (isPassesOpen()) renderPasses();
+    if (selectedAc) {
+      updateTag(selectedAc);
+      if (document.getElementById('sheet').classList.contains('full')) fillSheet(selectedAc);
+    }
+  }
   applyLang();
   var langChips = document.querySelectorAll('#langChips .chip');
   for (var lc = 0; lc < langChips.length; lc++) {
@@ -102,12 +118,7 @@ export function initApp() {
       lang = this.getAttribute('data-lang');
       applyLang();
       savePrefs(buildPrefs());
-      // Ridisegna le parti dinamiche gia visibili nella nuova lingua
-      updateHudFilters();
-      refreshErrBar();
-      if (selectedAc) { updateTag(selectedAc); if (document.getElementById('sheet').classList.contains('full')) fillSheet(selectedAc); }
-      refreshBoard();
-      renderSearchResults();
+      ridisegnaTestiDinamici();
     });
   }
 
@@ -757,7 +768,8 @@ export function initApp() {
     var emerg = emergencyInfo(ac);
     var banner = document.getElementById('emergBanner');
     if (emerg) {
-      banner.textContent = '\u26A0 ' + emerg + (ac.squawk ? ' \u00B7 SQUAWK ' + ac.squawk : '');
+      banner.textContent = t('emg.banner', { info: emerg }) +
+        (ac.squawk ? t('emg.squawk', { sq: ac.squawk }) : '');
       banner.style.display = 'block';
     } else {
       banner.style.display = 'none';
@@ -774,16 +786,16 @@ export function initApp() {
 
     // --- Fase di volo (signature) con icona e barra quota ---
     var phaseEl = document.getElementById('shPhase');
-    var phase = flightPhase(ac);
-    if (phase) {
-      document.getElementById('phaseTxt').textContent = phase;
-      // Icona secondo la fase
-      var pico = '\u2708';
-      if (phase.indexOf('SALITA') !== -1) pico = '\u2197';
-      else if (phase.indexOf('DISCESA') !== -1 || phase.indexOf('AVVICINAMENTO') !== -1 || phase.indexOf('ARRIVO') !== -1) pico = '\u2198';
-      else if (phase.indexOf('CROCIERA') !== -1) pico = '\u2708';
-      else if (phase.indexOf('TERRA') !== -1) pico = '\u25AC';
-      document.getElementById('phaseIco').textContent = pico;
+    var phase = flightPhaseInfo(ac);
+    if (phase && phase.text) {
+      document.getElementById('phaseTxt').textContent = phase.text;
+      // L'icona segue il CODICE della fase, non il testo: confrontare il
+      // testo tradotto funzionava solo in italiano.
+      var PHASE_ICO = {
+        climb: '\u2197', descent: '\u2198', approach: '\u2198',
+        cruise: '\u2708', ground: '\u25AC', level: '\u2708'
+      };
+      document.getElementById('phaseIco').textContent = PHASE_ICO[phase.code] || '\u2708';
       // Barra quota: 0 a 40000 ft come riferimento crociera
       var pct = 0;
       if (typeof ac.alt_baro === 'number') pct = Math.max(0, Math.min(100, ac.alt_baro / 40000 * 100));
@@ -800,9 +812,9 @@ export function initApp() {
     // Assetto: rollio -> virata sinistra/destra
     var rEl = document.getElementById('shRoll');
     if (ac.roll == null) { rEl.textContent = '--'; }
-    else if (ac.roll < -5) { rEl.textContent = '\u21B0 sx ' + Math.abs(Math.round(ac.roll)) + '\u00B0'; }
-    else if (ac.roll > 5) { rEl.textContent = '\u21B1 dx ' + Math.round(ac.roll) + '\u00B0'; }
-    else { rEl.textContent = 'dritto'; }
+    else if (ac.roll < -5) { rEl.textContent = t('roll.left', { n: Math.abs(Math.round(ac.roll)) }); }
+    else if (ac.roll > 5) { rEl.textContent = t('roll.right', { n: Math.round(ac.roll) }); }
+    else { rEl.textContent = t('roll.straight'); }
     document.getElementById('shWind').textContent = (ac.ws != null && ac.wd != null)
       ? Math.round(ac.ws) + ' kt ' + compass(ac.wd) : '--';
     // Temperatura esterna: gli aerei a volte trasmettono valori assurdi
@@ -923,7 +935,7 @@ export function initApp() {
       var ff = isFirefightingAircraft(a);
       var ffBadge = ff ? ('<span class="ffbadge">' + (fireNear[a.hex] ? '🔥 ' + t('ff.nearFire') : t('ff.badge')) + '</span>') : '';
       html += '<div class="acrow' + (emg ? ' emg' : '') + (ff ? ' ff' : '') + '" data-hex="' + a.hex + '">' +
-        '<div class="ac-l"><div class="ac-f">' + flight + (emg ? '<span class="emgbadge">EMERG</span>' : '') + ffBadge + '</div>' +
+        '<div class="ac-l"><div class="ac-f">' + flight + (emg ? '<span class="emgbadge">' + t('emg.badge') + '</span>' : '') + ffBadge + '</div>' +
           '<div class="ac-sub">' + airlineName(a.flight) + (a.t ? ' · ' + a.t : '') + (phase ? ' · ' + phase : '') + '</div></div>' +
         '<div class="ac-r"><div class="ac-alt">' + alt + ' · ' + spd + '</div>' +
           '<div class="ac-dist">' + km.toFixed(0) + ' km ' + compass(bearingFromCenter(CENTER, a.lat, a.lon)) + '</div></div>' +
@@ -987,7 +999,7 @@ export function initApp() {
     var list = airlinesPresent().filter(function (n) {
       return !q || n.toLowerCase().indexOf(q) !== -1;
     });
-    var html = '<div class="opt" data-name="" style="padding:8px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line);">Tutte</div>';
+    var html = '<div class="opt" data-name="" style="padding:8px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line);">' + t('airline.all') + '</div>';
     for (var i = 0; i < list.length; i++) {
       html += '<div class="opt" data-name="' + list[i].replace(/"/g,'&quot;') + '" style="padding:8px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line);">' + list[i] + '</div>';
     }
@@ -1916,7 +1928,7 @@ export function initApp() {
   }
   function renderLocations() {
     var box = document.getElementById('locList');
-    var html = '<button class="chip loc' + (activeLocation === 'gps' ? ' active' : '') + '" data-id="gps">\u25c9 La mia posizione</button>' +
+    var html = '<button class="chip loc' + (activeLocation === 'gps' ? ' active' : '') + '" data-id="gps">' + t('set.myPos') + '</button>' +
       '<button class="chip loc' + (activeLocation === 'anzio' ? ' active' : '') + '" data-id="anzio">' + t('obs.anzio') + '</button>';
     for (var i = 0; i < userLocations.length; i++) {
       var l = userLocations[i];

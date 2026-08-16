@@ -29,6 +29,12 @@ export default defineConfig({
   build: {
     outDir: 'dist'
   },
+  // Due famiglie di test con due esecutori diversi: Vitest prende solo i
+  // *.test.js (funzioni pure), Playwright solo i *.spec.js in tests/e2e
+  // (interfaccia). Senza questo Vitest tenterebbe di eseguire anche i secondi.
+  test: {
+    include: ['tests/**/*.test.js']
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
