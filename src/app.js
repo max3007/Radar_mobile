@@ -1398,6 +1398,19 @@ export function initApp() {
   // Un buco isolato (galleria, cambio cella) non merita un allarme: il banner
   // compare dal secondo fallimento di fila. Mostra anche il PERCHE, cosi si
   // distingue un problema di rete da un rifiuto del server (es. HTTP 429).
+  // Il browser nasconde di proposito il motivo per cui una fetch e fallita:
+  // CORS, DNS, firewall e host irraggiungibile arrivano tutti come lo stesso
+  // errore generico, e cercare la causa alla cieca costa tempo. Una sonda in
+  // modalita 'no-cors' scioglie il dubbio piu insidioso: quella modalita non
+  // richiede il permesso CORS, quindi se la sonda PASSA vuol dire che il
+  // server risponde e a bloccarci e stata la politica CORS del browser; se
+  // fallisce anche lei, il problema e prima, sulla rete.
+  function classifyBlocked(url) {
+    return fetch(url, { mode: 'no-cors', cache: 'no-store' })
+      .then(function () { return t('err.cors'); })
+      .catch(function () { return t('err.blocked'); });
+  }
+
   var failStreak = 0;
   var lastErrWhy = null;
   function showNetError(why, immediate) {
@@ -1432,13 +1445,11 @@ export function initApp() {
       data = await res.json();
     } catch (e) {
       if (seq !== fetchSeq) return;
-      // Una fetch che fallisce SENZA risposta HTTP puo voler dire due cose
-      // molto diverse: telefono davvero offline, oppure connessione a posto e
-      // singola richiesta bloccata (CORS, filtro DNS/ad-block, firewall,
-      // server irraggiungibile). Il browser non lo dice, ma navigator.onLine
-      // separa almeno i due casi ed evita di dare la colpa alla connessione.
-      var why = /^HTTP /.test(e.message) ? e.message
-              : (navigator.onLine === false ? t('err.offline') : t('err.blocked'));
+      var why;
+      if (/^HTTP /.test(e.message)) why = e.message;          // il server ha risposto male
+      else if (navigator.onLine === false) why = t('err.offline');
+      else why = await classifyBlocked(SRC.point(CENTER[0], CENTER[1], radiusNM));
+      if (seq !== fetchSeq) return;
       showNetError(why);
       return;
     }
