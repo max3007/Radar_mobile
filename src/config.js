@@ -55,6 +55,18 @@ export const FIRE_WMS = {
   burnt: { layers: 'effis.nrt.ba.poly', days: 30 }
 };
 
+// INTERRUTTORE GENERALE delle chiamate ai dati di volo.
+// Messo a false il 2026-08-12: airplanes.live ha sospeso l'accesso pubblico e
+// risponde a ogni richiesta con
+//   "Please contact us at contact@airplanes.live. Your email MUST include a
+//    link to your project if you have one, a description of the project, and
+//    what your user base is."
+// Non e un limite temporaneo di traffico ma una procedura di autorizzazione:
+// continuare a interrogarli sarebbe inutile e scortese. L'app resta viva
+// (mappa, aeroporti, incendi, postazioni) e spiega perche mancano gli aerei.
+// PER RIACCENDERE, una volta ottenuta l'autorizzazione: rimettere true.
+export const PLANES_API_ENABLED = false;
+
 export const API = {
   // Posizioni ADS-B in tempo reale (gratuita, senza chiave)
   planesPoint: 'https://api.airplanes.live/v2/point/',       // + lat/lon/raggioNM

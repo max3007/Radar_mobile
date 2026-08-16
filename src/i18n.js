@@ -13,6 +13,7 @@ const DICT = {
     'err.offline': 'telefono offline',
     'err.blocked': 'connessione ok, richiesta bloccata',
     'err.apiSaid': 'l\'API risponde: {msg}',
+    'hud.apiSuspended': 'DATI AEREI SOSPESI \u00b7 IN ATTESA DI AUTORIZZAZIONE DA AIRPLANES.LIVE',
     'obs.locating': 'rilevo posizione…', 'obs.yourPos': 'la tua posizione',
     'obs.anzio': 'Anzio', 'obs.anzioNoGps': 'Anzio (GPS non disp.)', 'obs.anzioHttps': 'Anzio (serve HTTPS)',
     // FAB
@@ -131,6 +132,7 @@ const DICT = {
     'err.offline': 'phone offline',
     'err.blocked': 'connection ok, request blocked',
     'err.apiSaid': 'API says: {msg}',
+    'hud.apiSuspended': 'AIRCRAFT DATA SUSPENDED \u00b7 AWAITING AUTHORISATION FROM AIRPLANES.LIVE',
     'obs.locating': 'locating…', 'obs.yourPos': 'your position',
     'obs.anzio': 'Anzio', 'obs.anzioNoGps': 'Anzio (no GPS)', 'obs.anzioHttps': 'Anzio (needs HTTPS)',
     'fab.above': 'ABOVE\nYOU', 'fab.arriving': 'IN-\nBOUND', 'fab.mira': 'AIM',

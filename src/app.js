@@ -5,7 +5,7 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
-import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN, FIRE_WMS } from './config.js';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN, FIRE_WMS, PLANES_API_ENABLED } from './config.js';
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, planeColor, altLabel, isOnGround, compass,
@@ -1035,6 +1035,7 @@ export function initApp() {
   // Scansione dedicata a raggio massimo (solo a pannello aperto): estende il
   // preaviso senza toccare il raggio della mappa. Rinfrescata a ogni polling.
   async function fetchPassScan() {
+    if (!PLANES_API_ENABLED) return;   // accesso sospeso: nessuna scansione
     if (!isPassesOpen()) return;
     var seq = ++passScanSeq;
     try {
@@ -1360,6 +1361,9 @@ export function initApp() {
   var API_MIN_GAP_MS = 1100;
   var nextApiSlot = 0;
   function apiFetch(url) {
+    // Barriera finale: con l'accesso sospeso nessuna strada deve poter far
+    // partire una richiesta, nemmeno per errore di un ramo dimenticato.
+    if (!PLANES_API_ENABLED) return Promise.reject(new Error('API_DISABLED'));
     var now = Date.now();
     var slot = Math.max(now, nextApiSlot);
     nextApiSlot = slot + API_MIN_GAP_MS;
@@ -1483,6 +1487,14 @@ export function initApp() {
     });
   }
   function startPolling() {
+    // Accesso sospeso: non si parte nemmeno. Meglio una spiegazione ferma che
+    // un'app che sembra rotta e continua a bussare a una porta chiusa.
+    if (!PLANES_API_ENABLED) {
+      errBar.textContent = t('hud.apiSuspended');
+      errBar.style.display = 'block';
+      document.getElementById('stCount').textContent = '--';
+      return;
+    }
     if (pollingOn) return;
     pollingOn = true;
     pollLoop();
@@ -1658,6 +1670,7 @@ export function initApp() {
   async function searchFlight() {
     var raw = document.getElementById('flightSearch').value;
     var note = document.getElementById('searchNote');
+    if (!PLANES_API_ENABLED) { note.textContent = t('hud.apiSuspended'); return; }
     if (!raw.trim()) { note.textContent = t('search.typeFlight'); return; }
     var cs = toCallsign(raw);
     note.textContent = t('search.searching', { cs: cs });

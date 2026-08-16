@@ -103,6 +103,31 @@ o descrizione) e li evidenzia con colore/icona dedicati; se rilevati vicino a
 un hotspot attivo (verifica via WMS GetFeatureInfo, best-effort) l'evidenza
 si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda).
 
+## ⚠️ STATO ATTUALE: dati aerei sospesi (2026-08-12)
+
+`PLANES_API_ENABLED = false` in `src/config.js`: **l'app non chiama piu
+l'API dei voli**. airplanes.live ha chiuso l'accesso pubblico e risponde a
+ogni richiesta con «Please contact us at contact@airplanes.live. Your email
+MUST include a link to your project if you have one, a description of the
+project, and what your user base is.»
+
+Non e un limite temporaneo di traffico: e una procedura di autorizzazione.
+Verificato che NON dipende da noi — il blocco arriva identico aprendo l'URL
+a mano nel browser (senza `origin`/`referer` dell'app) e anche da VPN, cioe
+da un IP completamente diverso.
+
+Il resto dell'app funziona (mappa, aeroporti, postazioni, incendi) e mostra
+il messaggio «DATI AEREI SOSPESI». **Per riaccendere, una volta ottenuta
+l'autorizzazione: rimettere `PLANES_API_ENABLED = true`.** Il blocco e su
+tre livelli (polling, scansione IN ARRIVO, ricerca volo) piu una barriera
+finale dentro `apiFetch`, cosi nessun ramo dimenticato puo far partire una
+richiesta.
+
+Se invece si decide di cambiare fonte dati, i punti da toccare sono `API`
+in `src/config.js` e i tre chiamanti di `apiFetch` in `src/app.js`; il
+formato atteso e quello di airplanes.live (`{ac: [...]}` con i campi hex,
+flight, lat, lon, alt_baro, gs, track, t, desc...).
+
 ## DA VERIFICARE SUL CAMPO (non testabile in sandbox)
 
 1. ~~Overlay incendi (EFFIS)~~ — RISOLTO 2026-08-09: `ies-ows.jrc.ec.europa.eu`
