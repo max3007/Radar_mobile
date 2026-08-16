@@ -112,7 +112,7 @@ const DICT = {
     'arr.none': 'Nessun passaggio ravvicinato previsto nei prossimi {n} minuti.',
     'arr.scanning': 'Scansione a raggio ampio…', 'arr.now': 'ora', 'arr.inMin': 'tra {n}′',
     'arr.overhead': 'SORVOLO', 'arr.towards': '{elev}° · verso {dir}',
-    'arr.note': 'Scansione fino a 250 NM · stima su rotta e velocità attuali · aggiornata ogni 12 s',
+    'arr.note': 'Scansione fino a {nm} NM · stima su rotta e velocità attuali · aggiornata ogni {s} s',
     // Lista aerei
     'list.count1': '{n} AEREO NEL RAGGIO', 'list.count': '{n} AEREI NEL RAGGIO',
     'list.none': 'Nessun aereo nel raggio.', 'board.none': 'Nessun contatto',
@@ -218,7 +218,7 @@ const DICT = {
     'arr.none': 'No close pass expected in the next {n} minutes.',
     'arr.scanning': 'Wide-range scan…', 'arr.now': 'now', 'arr.inMin': 'in {n}′',
     'arr.overhead': 'OVERHEAD', 'arr.towards': '{elev}° · look {dir}',
-    'arr.note': 'Scan up to 250 NM · estimate on current track & speed · refreshed every 12 s',
+    'arr.note': 'Scan up to {nm} NM · estimate on current track & speed · refreshed every {s} s',
     'list.count1': '{n} AIRCRAFT IN RANGE', 'list.count': '{n} AIRCRAFT IN RANGE',
     'list.none': 'No aircraft in range.', 'board.none': 'No contact',
     'alert.incoming': '✈ {flight} inbound · {when} · {km} · look {dir}',

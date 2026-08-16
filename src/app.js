@@ -75,11 +75,21 @@ export function initApp() {
     if (htmlRoot) htmlRoot.setAttribute('lang', lang);
     applyStaticI18n();
     updateSliderLabels();
+    updateArrNote();
     var chips = document.querySelectorAll('#langChips .chip');
     for (var i = 0; i < chips.length; i++) chips[i].classList.toggle('active', chips[i].getAttribute('data-lang') === lang);
     document.getElementById('btnAbove').textContent = t('fab.above');
     document.getElementById('btnPasses').textContent = t('fab.arriving');
     document.getElementById('btnMira').textContent = t('fab.mira');
+  }
+  // Nota del pannello IN ARRIVO: i numeri vengono dalle costanti, non
+  // riscritti a mano, altrimenti al primo cambio di ritmo l'app direbbe
+  // il falso senza che nessuno se ne accorga.
+  function updateArrNote() {
+    var el = document.getElementById('arrNote');
+    if (el) el.textContent = t('arr.note', {
+      nm: PASS_SCAN_NM, s: Math.round(POLL_INTERVAL_MS / 1000)
+    });
   }
   function updateSliderLabels() {
     document.getElementById('radiusLabel').textContent = t('set.radius', { n: radiusNM });

@@ -214,7 +214,9 @@ aggiornare quella costante e il modo piu rapido per validare il cambio.
 - Il dizionario `airlines.json` (~5800 voci) è grande: è la maggior parte del
   bundle. Normale.
 - `nextPass` (CPA) assume rotta/velocità costanti: affidabile ~30 min, per
-  questo l'orizzonte è breve e la lista si aggiorna ogni 12 s.
+  questo l'orizzonte è breve e la lista si aggiorna a ogni polling
+  (`POLL_INTERVAL_MS`, oggi 6 s). La nota nel pannello IN ARRIVO ricava i
+  numeri da quelle costanti: non riscriverli a mano nelle stringhe i18n.
 - Il polling si ferma in background (`visibilitychange`) per risparmiare.
 - **L'API aerei accetta ~1 richiesta al secondo.** L'app pero ne fa partire
   due ravvicinate quando IN ARRIVO e aperto (polling nel raggio + scansione a

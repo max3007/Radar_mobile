@@ -2,7 +2,7 @@
 
 export const DEFAULT_CENTER = [41.4479, 12.6285]; // Anzio
 export const DEFAULT_RADIUS_NM = 100;
-export const POLL_INTERVAL_MS = 12000;
+export const POLL_INTERVAL_MS = 6000;   // aggiornamento posizioni: piu basso = piu fluido
 
 // Stili mappa selezionabili dalle impostazioni. 'dark' e lo stile radar
 // originale (tile scure schiarite via filtro CSS, attivato dalla classe
