@@ -539,7 +539,7 @@ export function initApp() {
 
   // ---------- Foto ----------
   async function fetchPhotoFrom(url) {
-    var res = await fetch(url);
+    var res = await fetchConScadenza(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var data = await res.json();
     if (data.photos && data.photos.length > 0) {
@@ -666,7 +666,7 @@ export function initApp() {
     if (cs in routeCache) { showRoute(routeCache[cs], ac); return; }
     note.textContent = t('route.searching');
     try {
-      var res = await fetch(API.routeCallsign + encodeURIComponent(cs));
+      var res = await fetchConScadenza(API.routeCallsign + encodeURIComponent(cs));
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var data = await res.json();
       var fr = data && data.response && data.response.flightroute;
@@ -1064,20 +1064,22 @@ export function initApp() {
 
   // Scansione dedicata a raggio massimo (solo a pannello aperto): estende il
   // preaviso senza toccare il raggio della mappa. Rinfrescata a ogni polling.
+  // Vero quando la scansione ampia non e riuscita e stiamo mostrando solo gli
+  // aerei del raggio corrente. Prima il ripiego era muto: la lista diceva di
+  // essere una scansione a 250 NM mentre mostrava i dati di 40 NM.
+  var passScanRidotta = false;
   async function fetchPassScan() {
-    if (!PLANES_API_ENABLED) return;   // accesso sospeso: nessuna scansione
     if (!isPassesOpen()) return;
     var seq = ++passScanSeq;
     try {
-      var res = await apiFetch(SRC.point(CENTER[0], CENTER[1], PASS_SCAN_NM));
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      var data = await res.json();
+      var data = await chiediVoli(SRC.point(CENTER[0], CENTER[1], PASS_SCAN_NM));
       if (seq !== passScanSeq || !isPassesOpen()) return;
-      if (SRC.errorOf(data)) throw new Error('API'); // ripiega sul set nel raggio
       passAircraft = trimToRadius(data.ac || [], PASS_SCAN_NM);
+      passScanRidotta = false;
     } catch (e) {
       if (seq !== passScanSeq) return;
-      passAircraft = lastAircraft; // fallback al set nel raggio corrente
+      passAircraft = lastAircraft;  // ripiego sul set nel raggio corrente
+      passScanRidotta = true;       // e lo diciamo, invece di far finta di niente
     }
     if (!isPassesOpen()) return;
     renderPasses();
@@ -1096,8 +1098,13 @@ export function initApp() {
   function renderPasses() {
     var box = document.getElementById('passList');
     var list = computePasses();
+    // Se la scansione ampia non e riuscita lo si dice: mostrare i dati del
+    // raggio corrente spacciandoli per una scansione a 250 NM e peggio che
+    // non mostrarli.
+    var avviso = passScanRidotta
+      ? '<div class="empty">' + t('arr.reduced', { nm: radiusNM }) + '</div>' : '';
     if (!list.length) {
-      box.innerHTML = '<div class="empty">' + t('arr.none', { n: PASS_HORIZON_MIN }) + '</div>';
+      box.innerHTML = avviso + '<div class="empty">' + t('arr.none', { n: PASS_HORIZON_MIN }) + '</div>';
       return;
     }
     var now = Date.now();
@@ -1118,7 +1125,7 @@ export function initApp() {
         '<div class="geo">' + km + '<small>' + t('arr.towards', { elev: p.elevAtPass, dir: compass(p.brgAtPass) }) + '</small></div>' +
         '</div>';
     }
-    box.innerHTML = html;
+    box.innerHTML = avviso + html;
     var rows = box.querySelectorAll('.pr');
     for (var k = 0; k < rows.length; k++) {
       rows[k].addEventListener('click', function () {
@@ -1397,11 +1404,6 @@ export function initApp() {
     if (esito != null) l.textContent = new Date().toLocaleTimeString() + ' → ' + esito;
   }
 
-  // L'API pubblica degli aerei accetta circa UNA richiesta al secondo. L'app
-  // pero ne fa partire due ravvicinate ogni volta che il pannello IN ARRIVO e
-  // aperto (polling nel raggio + scansione a 250 NM), e la seconda veniva
-  // rifiutata: in app si vedeva "SEGNALE PERSO" senza motivo apparente.
-  // Qui le mettiamo in fila, prenotando a ciascuna il suo turno.
   // Alcune fonti restituiscono anche aerei un po' oltre il raggio richiesto
   // (adsb.fi filtra per riquadro, non per cerchio): senza questo taglio si
   // vedrebbero aerei fuori dall'anello piu esterno del radar. Il campo `dst`
@@ -1416,102 +1418,142 @@ export function initApp() {
     });
   }
 
+  // ---------- Coda delle richieste ----------
+  // Le API pubbliche che usiamo accettano circa UNA richiesta al secondo.
+  // L'app pero ne fa partire due ravvicinate ogni volta che il pannello IN
+  // ARRIVO e aperto (polling nel raggio + scansione a 250 NM): la seconda
+  // veniva rifiutata e in app si leggeva "SEGNALE PERSO" senza motivo.
+  // Ogni coda prenota a chi chiama il suo turno.
+  function creaCoda(gapMs) {
+    var prossimoTurno = 0;
+    return function attendiTurno() {
+      var ora = Date.now();
+      var turno = Math.max(ora, prossimoTurno);
+      prossimoTurno = turno + gapMs;
+      var attesa = turno - ora;
+      return attesa > 0 ? new Promise(function (r) { setTimeout(r, attesa); }) : Promise.resolve();
+    };
+  }
   var API_MIN_GAP_MS = 1100;
-  var API_TIMEOUT_MS = 15000;  // oltre, la richiesta e considerata persa
-  var nextApiSlot = 0;
-  function apiFetch(url) {
-    // Barriera finale: con l'accesso sospeso nessuna strada deve poter far
-    // partire una richiesta, nemmeno per errore di un ramo dimenticato.
-    if (!PLANES_API_ENABLED) return Promise.reject(new Error('API_DISABLED'));
-    var now = Date.now();
-    var slot = Math.max(now, nextApiSlot);
-    nextApiSlot = slot + API_MIN_GAP_MS;
-    var wait = slot - now;
-    var ready = wait > 0 ? new Promise(function (r) { setTimeout(r, wait); }) : Promise.resolve();
-    return ready.then(function () {
-      // Scadenza: una richiesta che resta appesa senza mai concludersi (capita
-      // quando il telefono congela la pagina a meta) blocherebbe il ciclo di
-      // aggiornamento a tempo indeterminato. Meglio un fallimento dichiarato,
-      // che fa scattare il normale meccanismo di riprova.
-      if (typeof AbortController === 'undefined') return fetch(url);
-      var ctrl = new AbortController();
-      var killer = setTimeout(function () { ctrl.abort(); }, API_TIMEOUT_MS);
-      return fetch(url, { signal: ctrl.signal })
-        .finally(function () { clearTimeout(killer); });
-    });
+  var API_TIMEOUT_MS = 15000;   // oltre, la richiesta e considerata persa
+  var turnoVoli = creaCoda(API_MIN_GAP_MS);
+  var turnoLuoghi = creaCoda(API_MIN_GAP_MS); // Nominatim ha lo stesso limite
+
+  // Scadenza su OGNI richiesta: una che resta appesa senza mai concludersi
+  // (capita quando il telefono congela la pagina a meta) lasciava "cerco..."
+  // nel pannello per sempre e bloccava il ciclo di aggiornamento.
+  function fetchConScadenza(url, opzioni) {
+    if (typeof AbortController === 'undefined') return fetch(url, opzioni);
+    var ctrl = new AbortController();
+    var killer = setTimeout(function () { ctrl.abort(); }, API_TIMEOUT_MS);
+    var o = Object.assign({}, opzioni || {}, { signal: ctrl.signal });
+    return fetch(url, o).finally(function () { clearTimeout(killer); });
   }
 
-  // Un buco isolato (galleria, cambio cella) non merita un allarme: il banner
-  // compare dal secondo fallimento di fila. Mostra anche il PERCHE, cosi si
-  // distingue un problema di rete da un rifiuto del server (es. HTTP 429).
-  // Il browser nasconde di proposito il motivo per cui una fetch e fallita:
-  // CORS, DNS, firewall e host irraggiungibile arrivano tutti come lo stesso
-  // errore generico, e cercare la causa alla cieca costa tempo. Una sonda in
-  // modalita 'no-cors' scioglie il dubbio piu insidioso: quella modalita non
-  // richiede il permesso CORS, quindi se la sonda PASSA vuol dire che il
-  // server risponde e a bloccarci e stata la politica CORS del browser; se
-  // fallisce anche lei, il problema e prima, sulla rete.
-  function classifyBlocked(url) {
+  // ---------- Errori con la lingua rimandata ----------
+  // Conserviamo CHIAVE e parametri, non la frase gia tradotta: solo cosi il
+  // banner si puo ridisegnare nella lingua giusta quando l'utente la cambia.
+  // Prima teneva il testo tradotto e al cambio lingua restava mezzo in
+  // italiano, oppure veniva riportato a un messaggio generico che diceva
+  // tutt'altro ("segnale perso" al posto di "dati sospesi").
+  function ErroreVoli(whyKey, whyParams, sospeso) {
+    var e = new Error(whyKey);
+    e.whyKey = whyKey;
+    e.whyParams = whyParams || null;
+    e.sospeso = !!sospeso;
+    return e;
+  }
+
+  // La diagnosi CORS ha senso SOLO su URL di un altro dominio: con la fonte
+  // attuale le chiamate sono al nostro stesso dominio (/adsb/..., inoltrato
+  // da vercel.json) e il CORS non entra proprio in gioco. La sonda resta per
+  // il caso in cui si torni a una fonte cross-origin, ma non spreca piu una
+  // richiesta quando non puo dire nulla.
+  function isCrossOrigin(url) {
+    return /^https?:\/\//i.test(url) && url.indexOf(location.origin) !== 0;
+  }
+  function classificaBlocco(url) {
+    if (!isCrossOrigin(url)) return Promise.resolve('err.blocked');
     return fetch(url, { mode: 'no-cors', cache: 'no-store' })
-      .then(function () { return t('err.cors'); })
-      .catch(function () { return t('err.blocked'); });
+      .then(function () { return 'err.cors'; })
+      .catch(function () { return 'err.blocked'; });
   }
 
+  // ---------- L'unico modo di interrogare i dati di volo ----------
+  // Applica SEMPRE, nello stesso ordine: interruttore generale, turno nella
+  // coda, scadenza, controllo dell'errore nel corpo, diagnostica. Prima ogni
+  // chiamante ne applicava un sottoinsieme diverso: per questo la ricerca
+  // volo dichiarava "non in volo" quando la fonte aveva rifiutato, e la
+  // scansione a 250 NM falliva in silenzio mostrando altri dati.
+  async function chiediVoli(url) {
+    diag(url, null);
+    if (!PLANES_API_ENABLED) throw ErroreVoli('hud.apiSuspended', null, true);
+    var res;
+    try {
+      await turnoVoli();
+      res = await fetchConScadenza(url);
+    } catch (e) {
+      var chiave = (navigator.onLine === false) ? 'err.offline' : await classificaBlocco(url);
+      throw ErroreVoli(chiave);
+    }
+    if (!res.ok) throw ErroreVoli('err.http', { code: res.status });
+    var data = await res.json();
+    // La fonte puo rispondere con successo ma con un corpo di errore: e cosi
+    // che airplanes.live comunicava il blocco. Dove sta scritto l'errore
+    // cambia da fornitore a fornitore: lo sa la fonte, non noi.
+    var apiErr = SRC.errorOf(data);
+    if (apiErr) throw ErroreVoli('err.apiSaid', { msg: String(apiErr).slice(0, 90) });
+    return data;
+  }
+
+  // ---------- Banner rosso ----------
+  var bannerStato = null;   // { key, whyKey, whyParams } oppure null
   var failStreak = 0;
-  var lastErrWhy = null;
-  function showNetError(why, immediate) {
-    failStreak++;
-    backoffLevel++; // rallenta: al prossimo giro aspettiamo di piu
-    lastErrWhy = why;
-    // immediate: quando e il server a dire esplicitamente cosa non va, non ha
-    // senso aspettare la conferma di un secondo tentativo.
-    if (!immediate && failStreak < 2) return;
-    errBar.textContent = t('hud.signalLostWhy', { why: why });
+  function disegnaBanner() {
+    if (!bannerStato) return;
+    var p = bannerStato.whyKey
+      ? { why: t(bannerStato.whyKey, bannerStato.whyParams) }
+      : null;
+    errBar.textContent = t(bannerStato.key, p);
     errBar.style.display = 'block';
+  }
+  function mostraBanner(key, whyKey, whyParams) {
+    bannerStato = { key: key, whyKey: whyKey || null, whyParams: whyParams || null };
+    disegnaBanner();
+  }
+  // Un buco isolato (galleria, cambio cella) non merita un allarme: il banner
+  // compare dal secondo fallimento di fila. Se pero e il server a dire
+  // esplicitamente cosa non va, non ha senso attendere una conferma.
+  function segnalaErroreVoli(err) {
+    failStreak++;
+    backoffLevel++;  // rallenta: al prossimo giro aspettiamo di piu
+    diag(null, t(err.whyKey, err.whyParams));
+    if (err.sospeso) { mostraBanner('hud.apiSuspended'); return; }
+    var esplicito = (err.whyKey === 'err.apiSaid' || err.whyKey === 'err.http');
+    bannerStato = { key: 'hud.signalLostWhy', whyKey: err.whyKey, whyParams: err.whyParams };
+    if (esplicito || failStreak >= 2) disegnaBanner();
   }
   function clearNetError() {
     failStreak = 0;
-    backoffLevel = -1; // di nuovo tutto bene: si torna al ritmo normale
-    lastErrWhy = null;
+    backoffLevel = -1;  // di nuovo tutto bene: si torna al ritmo normale
+    bannerStato = null;
     errBar.style.display = 'none';
   }
   // Ridisegna il banner nella lingua giusta se la si cambia mentre e visibile
-  function refreshErrBar() {
-    if (lastErrWhy != null && errBar.style.display === 'block') {
-      errBar.textContent = t('hud.signalLostWhy', { why: lastErrWhy });
-    }
-  }
+  function refreshErrBar() { disegnaBanner(); }
+
   async function fetchPlanes() {
     var seq = ++fetchSeq;
     var data;
     // Fase 1: la rete. Solo qui un errore significa davvero "segnale perso".
-    var url = SRC.point(CENTER[0], CENTER[1], radiusNM);
-    diag(url, null);
     try {
-      var res = await apiFetch(url);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      data = await res.json();
+      data = await chiediVoli(SRC.point(CENTER[0], CENTER[1], radiusNM));
     } catch (e) {
       if (seq !== fetchSeq) return;
-      var why;
-      if (/^HTTP /.test(e.message)) why = e.message;          // il server ha risposto male
-      else if (navigator.onLine === false) why = t('err.offline');
-      else why = await classifyBlocked(url);
-      if (seq !== fetchSeq) return;
-      diag(null, why);
-      showNetError(why);
+      segnalaErroreVoli(e);
       return;
     }
     if (seq !== fetchSeq) return; // risposta superata da una piu recente: scarta
-    // La fonte puo rispondere con successo ma con un corpo di errore (e cosi
-    // che airplanes.live comunicava il blocco). Dove sta scritto l'errore
-    // cambia da fornitore a fornitore: lo sa la fonte, non noi.
-    var apiErr = SRC.errorOf(data);
-    if (apiErr) {
-      diag(null, String(apiErr).slice(0, 60));
-      showNetError(t('err.apiSaid', { msg: String(apiErr).slice(0, 90) }), true);
-      return;
-    }
     lastAircraft = trimToRadius(data.ac || [], radiusNM);
     diag(null, t('diag.ok', { n: lastAircraft.length }));
     clearNetError();
@@ -1543,9 +1585,7 @@ export function initApp() {
       }
     } catch (e) {
       console.error('RADAR: errore durante il disegno', e);
-      lastErrWhy = null;
-      errBar.textContent = t('hud.drawError');
-      errBar.style.display = 'block';
+      mostraBanner('hud.drawError');
     }
   }
 
@@ -1564,7 +1604,6 @@ export function initApp() {
   // cambiare a seconda di com'e andata l'ultima richiesta.
   var pollingOn = false;
   var pollGen = 0;        // generazione: rende obsoleti i cicli precedenti
-  var MIN_REFETCH_MS = 2000; // distanza minima fra due riavvii del ciclo
   var lastFetchAt = 0;    // quando e partito l'ultimo tentativo
 
   function pollLoop(gen) {
@@ -1596,12 +1635,13 @@ export function initApp() {
     pollingOn = true;
     if (timer) { clearTimeout(timer); timer = null; }
     var gen = pollGen;
-    // Al ritorno in primo piano piu eventi scattano insieme e ognuno passa di
-    // qui: se ciascuno lanciasse subito una richiesta partirebbe una raffica
-    // inutile. Il ciclo lo si riavvia comunque (e quello che salva l'app), ma
-    // se abbiamo appena interrogato la fonte si aspetta un attimo.
-    var since = Date.now() - lastFetchAt;
-    if (since < MIN_REFETCH_MS) timer = setTimeout(function () { pollLoop(gen); }, MIN_REFETCH_MS - since);
+    // Al ritorno in primo piano piu eventi scattano insieme (visibilitychange,
+    // pageshow, focus) e ognuno passa di qui. Invece di sparare una richiesta
+    // a ogni evento, il nuovo ciclo riprende la CADENZA normale contando dal
+    // momento dell'ultima richiesta: se e appena partita si aspetta il resto
+    // dell'intervallo, se manca da tempo si riparte subito.
+    var restante = currentPollDelay() - (Date.now() - lastFetchAt);
+    if (restante > 0) timer = setTimeout(function () { pollLoop(gen); }, restante);
     else pollLoop(gen);
   }
   function stopPolling() {
@@ -1629,7 +1669,7 @@ export function initApp() {
   // troppo tempo, il ciclo si e rotto comunque. Meglio farlo ripartire da soli
   // che lasciare all'utente il dubbio se i dati siano veri o congelati.
   setInterval(function () {
-    if (document.hidden || !PLANES_API_ENABLED) return;
+    if (document.hidden) return;
     if (Date.now() - lastFetchAt > Math.max(currentPollDelay() * 3, 30000)) startPolling();
   }, 10000);
 
@@ -1790,14 +1830,11 @@ export function initApp() {
   async function searchFlight() {
     var raw = document.getElementById('flightSearch').value;
     var note = document.getElementById('searchNote');
-    if (!PLANES_API_ENABLED) { note.textContent = t('hud.apiSuspended'); return; }
     if (!raw.trim()) { note.textContent = t('search.typeFlight'); return; }
     var cs = toCallsign(raw);
     note.textContent = t('search.searching', { cs: cs });
     try {
-      var res = await apiFetch(SRC.callsign(cs));
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      var data = await res.json();
+      var data = await chiediVoli(SRC.callsign(cs));
       var list = (data.ac || []).filter(function (a) { return a.lat != null && a.lon != null; });
       if (!list.length) {
         note.textContent = t('search.notFlying', { cs: cs });
@@ -1819,7 +1856,11 @@ export function initApp() {
       openSheet(ac);
       openFull();
     } catch (e) {
-      note.textContent = t('search.error', { msg: e.message });
+      // Il difetto corretto qui: se la fonte rifiutava, l'app diceva "volo non
+      // in volo" invece del vero motivo. Ora riporta cosa ha risposto.
+      note.textContent = e.whyKey
+        ? t('search.error', { msg: t(e.whyKey, e.whyParams) })
+        : t('search.error', { msg: e.message });
       clearSearchMarker();
     }
   }
@@ -2008,7 +2049,8 @@ export function initApp() {
     document.getElementById('locSearchResults').innerHTML = '';
     try {
       var url = API.geocode + '?format=json&limit=6&addressdetails=0&q=' + encodeURIComponent(q);
-      var res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      await turnoLuoghi();   // anche Nominatim accetta 1 richiesta al secondo
+      var res = await fetchConScadenza(url, { headers: { 'Accept': 'application/json' } });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var data = await res.json();
       if (!Array.isArray(data) || !data.length) { note.textContent = t('loc.noPlace', { q: q }); return; }
