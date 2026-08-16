@@ -217,7 +217,17 @@ aggiornare quella costante e il modo piu rapido per validare il cambio.
   questo l'orizzonte è breve e la lista si aggiorna a ogni polling
   (`POLL_INTERVAL_MS`, oggi 6 s). La nota nel pannello IN ARRIVO ricava i
   numeri da quelle costanti: non riscriverli a mano nelle stringhe i18n.
-- Il polling si ferma in background (`visibilitychange`) per risparmiare.
+- Il polling si ferma in background (`visibilitychange`) per risparmiare, ma
+  **il riavvio al ritorno deve restare incondizionato**. Il ciclo e a
+  `setTimeout` concatenati: tornando dopo qualche minuto il telefono puo aver
+  buttato via il timer o lasciato una richiesta appesa per sempre, mentre la
+  spia "sto girando" resta accesa. Con un controllo del tipo `if (pollingOn)
+  return` l'app restava con gli aerei immobili finche non la si chiudeva —
+  era esattamente questo il bug. Ora `startPolling()` riparte sempre e la
+  variabile `pollGen` garantisce che resti un solo ciclo vivo. Ci sono tre
+  reti di sicurezza: `pageshow`, `focus` e un controllo ogni 10 s che
+  rilancia il ciclo se in primo piano non parte una richiesta da troppo
+  tempo. `API_TIMEOUT_MS` impedisce a una richiesta appesa di bloccare tutto.
 - **L'API aerei accetta ~1 richiesta al secondo.** L'app pero ne fa partire
   due ravvicinate quando IN ARRIVO e aperto (polling nel raggio + scansione a
   250 NM, chiamata da `refreshPasses` dentro `fetchPlanes`): la seconda veniva

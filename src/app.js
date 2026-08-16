@@ -1405,6 +1405,7 @@ export function initApp() {
   }
 
   var API_MIN_GAP_MS = 1100;
+  var API_TIMEOUT_MS = 15000;  // oltre, la richiesta e considerata persa
   var nextApiSlot = 0;
   function apiFetch(url) {
     // Barriera finale: con l'accesso sospeso nessuna strada deve poter far
@@ -1415,7 +1416,17 @@ export function initApp() {
     nextApiSlot = slot + API_MIN_GAP_MS;
     var wait = slot - now;
     var ready = wait > 0 ? new Promise(function (r) { setTimeout(r, wait); }) : Promise.resolve();
-    return ready.then(function () { return fetch(url); });
+    return ready.then(function () {
+      // Scadenza: una richiesta che resta appesa senza mai concludersi (capita
+      // quando il telefono congela la pagina a meta) blocherebbe il ciclo di
+      // aggiornamento a tempo indeterminato. Meglio un fallimento dichiarato,
+      // che fa scattare il normale meccanismo di riprova.
+      if (typeof AbortController === 'undefined') return fetch(url);
+      var ctrl = new AbortController();
+      var killer = setTimeout(function () { ctrl.abort(); }, API_TIMEOUT_MS);
+      return fetch(url, { signal: ctrl.signal })
+        .finally(function () { clearTimeout(killer); });
+    });
   }
 
   // Un buco isolato (galleria, cambio cella) non merita un allarme: il banner
@@ -1540,12 +1551,18 @@ export function initApp() {
   // Ciclo a setTimeout invece che setInterval: cosi l'attesa successiva puo
   // cambiare a seconda di com'e andata l'ultima richiesta.
   var pollingOn = false;
-  function pollLoop() {
+  var pollGen = 0;        // generazione: rende obsoleti i cicli precedenti
+  var MIN_REFETCH_MS = 2000; // distanza minima fra due riavvii del ciclo
+  var lastFetchAt = 0;    // quando e partito l'ultimo tentativo
+
+  function pollLoop(gen) {
+    if (!pollingOn || gen !== pollGen) return; // ciclo fermato o superato
+    lastFetchAt = Date.now();
     // finally e non then: se fetchPlanes fallisse in modo imprevisto il ciclo
     // si fermerebbe e l'app resterebbe muta per sempre.
     fetchPlanes().finally(function () {
-      if (!pollingOn) return;
-      timer = setTimeout(pollLoop, currentPollDelay());
+      if (!pollingOn || gen !== pollGen) return;
+      timer = setTimeout(function () { pollLoop(gen); }, currentPollDelay());
     });
   }
   function startPolling() {
@@ -1557,23 +1574,52 @@ export function initApp() {
       document.getElementById('stCount').textContent = '--';
       return;
     }
-    if (pollingOn) return;
+    // Riparte SEMPRE da capo, senza fidarsi di un ciclo che potrebbe essere
+    // gia morto. Tornando da qualche minuto in background il telefono puo aver
+    // buttato via il timer o lasciato una richiesta appesa per sempre, mentre
+    // la spia "sto girando" resta accesa: un controllo del tipo "sono gia
+    // attivo" lascerebbe l'app ferma a guardare aerei immobili finche non la
+    // si chiude. La generazione garantisce che resti UN SOLO ciclo vivo.
+    pollGen++;
     pollingOn = true;
-    pollLoop();
+    if (timer) { clearTimeout(timer); timer = null; }
+    var gen = pollGen;
+    // Al ritorno in primo piano piu eventi scattano insieme e ognuno passa di
+    // qui: se ciascuno lanciasse subito una richiesta partirebbe una raffica
+    // inutile. Il ciclo lo si riavvia comunque (e quello che salva l'app), ma
+    // se abbiamo appena interrogato la fonte si aspetta un attimo.
+    var since = Date.now() - lastFetchAt;
+    if (since < MIN_REFETCH_MS) timer = setTimeout(function () { pollLoop(gen); }, MIN_REFETCH_MS - since);
+    else pollLoop(gen);
   }
   function stopPolling() {
     pollingOn = false;
+    pollGen++; // qualunque ciclo ancora in volo diventa obsoleto
     if (timer) { clearTimeout(timer); timer = null; }
+  }
+  function onVisible() {
+    document.getElementById('hudDot').style.animationPlayState = '';
+    startPolling();
   }
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       stopPolling();
       document.getElementById('hudDot').style.animationPlayState = 'paused';
     } else {
-      document.getElementById('hudDot').style.animationPlayState = '';
-      startPolling();
+      onVisible();
     }
   });
+  // Reti di sicurezza: non tutti i telefoni emettono gli stessi eventi al
+  // ritorno in primo piano, e basta perderne uno per restare fermi.
+  window.addEventListener('pageshow', function () { if (!document.hidden) onVisible(); });
+  window.addEventListener('focus', function () { if (!document.hidden) onVisible(); });
+  // Ultima rete: se l'app e in primo piano ma non parte una richiesta da
+  // troppo tempo, il ciclo si e rotto comunque. Meglio farlo ripartire da soli
+  // che lasciare all'utente il dubbio se i dati siano veri o congelati.
+  setInterval(function () {
+    if (document.hidden || !PLANES_API_ENABLED) return;
+    if (Date.now() - lastFetchAt > Math.max(currentPollDelay() * 3, 30000)) startPolling();
+  }, 10000);
 
   // ---------- Eventi UI ----------
   document.getElementById('btnCenter').addEventListener('click', function () { map.setView(CENTER, 8); });
