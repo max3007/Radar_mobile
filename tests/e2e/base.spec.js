@@ -78,6 +78,31 @@ test.describe('Pannelli e tasto BACK', () => {
     await expect(page.locator('#settings')).toHaveClass(/open/);
   });
 
+  test('il BACK chiude prima la finestra piu in alto, poi quella sotto', async ({ page }) => {
+    // L'invariante che il registro delle finestre protegge: la priorita di
+    // chiusura sta scritta in un posto solo. Prima era ripetuta a mano in tre
+    // elenchi e bastava dimenticarne uno per rompere il BACK in silenzio.
+    await preparaRete(page);
+    await page.goto('/');
+    // Un pannello aperto, e sopra di esso la finestra "SOPRA DI TE" (nei dati
+    // di prova l'aereo piu vicino e a 225 ft, quindi bassissimo sull'orizzonte
+    // e l'app chiede conferma invece di mostrarlo subito).
+    await apriPannello(page, '#btnBoard');
+    await page.locator('#btnAbove').dispatchEvent('click');
+    await page.waitForTimeout(600);
+    await expect(page.locator('#aboveDialog')).toBeVisible();
+    await expect(page.locator('#board')).toHaveClass(/open/);
+
+    await page.goBack();               // primo BACK: chiude la finestra sopra
+    await page.waitForTimeout(600);
+    await expect(page.locator('#aboveDialog')).toBeHidden();
+    await expect(page.locator('#board')).toHaveClass(/open/);   // il pannello resta
+
+    await page.goBack();               // secondo BACK: chiude il pannello
+    await page.waitForTimeout(600);
+    await expect(page.locator('#board')).not.toHaveClass(/open/);
+  });
+
   test('il tasto BACK chiude il pannello invece di uscire dall app', async ({ page }) => {
     await preparaRete(page);
     await page.goto('/');

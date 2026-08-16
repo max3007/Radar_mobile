@@ -692,11 +692,54 @@ export function initApp() {
   }
 
   // ---------- Pannelli ----------
+  // ---------- Registro delle finestre ----------
+  // Prima l'elenco delle finestre era ripetuto a mano in TRE punti (chiudi
+  // tutto, qualcosa e aperto?, chiudi la piu in alto) e convivevano due modi
+  // diversi di dire "aperta": la classe 'open' per i pannelli a scomparsa e
+  // style.display per MIRA e i dialoghi. Chi aggiungeva un pannello e
+  // dimenticava uno dei tre elenchi rompeva il tasto BACK senza che nulla lo
+  // segnalasse. Ora la descrizione sta in un posto solo e le tre funzioni si
+  // ricavano da qui: aggiungere una finestra costa una riga.
+
+  // Pannelli a scomparsa dal basso: se ne apre uno alla volta.
+  // onApri: cosa fare in piu nel momento in cui si apre.
+  var PANNELLI = {
+    board: { onApri: function () { refreshBoard(); } },
+    passes: { onApri: function () {
+      document.getElementById('passList').innerHTML =
+        '<div class="empty">' + t('arr.scanning') + '</div>';
+      fetchPassScan();  // legge a 250 NM, poi popola tabella e proiezioni
+    } },
+    settings: { onApri: null },
+    searchPanel: { onApri: function () {
+      document.getElementById('searchNote').textContent = '';
+      renderSearchResults();
+      setTimeout(function () { document.getElementById('flightSearch').focus(); }, 250);
+    } }
+  };
+  // Finestre sovrapposte ai pannelli, IN ORDINE DI PRIORITA per il tasto
+  // BACK: dalla piu "in alto" alla piu in basso.
+  var SOVRAPPOSTE = [
+    { id: 'confirmDialog', chiudi: hideConfirm },
+    { id: 'aboveDialog', chiudi: hideAboveDialog },
+    { id: 'miraOverlay', chiudi: stopMira }
+  ];
+
+  function pannelloAperto(id) {
+    return document.getElementById(id).classList.contains('open');
+  }
+  function sovrappostaAperta(f) {
+    return document.getElementById(f.id).style.display === 'block';
+  }
+  function togglePannello(id) {
+    var eraAperto = pannelloAperto(id);
+    closeAll();
+    if (eraAperto) return;   // secondo tocco sullo stesso pulsante: chiude
+    document.getElementById(id).classList.add('open');
+    if (PANNELLI[id].onApri) PANNELLI[id].onApri();
+  }
   function closeAll() {
-    document.getElementById('board').classList.remove('open');
-    document.getElementById('settings').classList.remove('open');
-    document.getElementById('searchPanel').classList.remove('open');
-    document.getElementById('passes').classList.remove('open');
+    for (var id in PANNELLI) document.getElementById(id).classList.remove('open');
     clearPassProjections();
     hideAboveDialog();
     hideConfirm();
@@ -890,7 +933,7 @@ export function initApp() {
   map.on('click', closeAll);
 
   // ---------- Pannello TRAFFICO: lista aerei + classifica compagnie ----------
-  function isBoardOpen() { return document.getElementById('board').classList.contains('open'); }
+  function isBoardOpen() { return pannelloAperto('board'); }
 
   // Classifica compagnie (tab COMPAGNIE)
   function renderBoard() {
@@ -1039,7 +1082,7 @@ export function initApp() {
   var passLayer = null;      // proiezioni sulla mappa (linea + crocetta)
   var passAircraft = [];     // set esteso dalla scansione a raggio ampio
   var passScanSeq = 0;       // scarta risposte fuori ordine della scansione
-  function isPassesOpen() { return document.getElementById('passes').classList.contains('open'); }
+  function isPassesOpen() { return pannelloAperto('passes'); }
 
   // Calcola e ordina i passaggi entro soglia e orizzonte temporale.
   // Usa il set della scansione ampia (250 NM), cosi vede gli aerei molto
@@ -1675,28 +1718,9 @@ export function initApp() {
 
   // ---------- Eventi UI ----------
   document.getElementById('btnCenter').addEventListener('click', function () { map.setView(CENTER, 8); });
-  document.getElementById('btnBoard').addEventListener('click', function () {
-    var wasOpen = document.getElementById('board').classList.contains('open');
-    closeAll();
-    if (!wasOpen) {
-      document.getElementById('board').classList.add('open');
-      refreshBoard();
-    }
-  });
-  document.getElementById('btnPasses').addEventListener('click', function () {
-    var wasOpen = isPassesOpen();
-    closeAll();
-    if (!wasOpen) {
-      document.getElementById('passes').classList.add('open');
-      document.getElementById('passList').innerHTML = '<div class="empty">' + t('arr.scanning') + '</div>';
-      fetchPassScan(); // legge a 250 NM poi popola la tabella e le proiezioni
-    }
-  });
-  document.getElementById('btnSettings').addEventListener('click', function () {
-    var wasOpen = document.getElementById('settings').classList.contains('open');
-    closeAll();
-    if (!wasOpen) document.getElementById('settings').classList.add('open');
-  });
+  document.getElementById('btnBoard').addEventListener('click', function () { togglePannello('board'); });
+  document.getElementById('btnPasses').addEventListener('click', function () { togglePannello('passes'); });
+  document.getElementById('btnSettings').addEventListener('click', function () { togglePannello('settings'); });
   // SOPRA DI TE: se l'aereo piu vicino e basso sull'orizzonte non e davvero
   // "sopra di te" (e probabilmente non visibile a occhio): chiedi conferma.
   var ABOVE_MIN_ELEV = 15; // gradi di elevazione minima per considerarlo visibile
@@ -1871,17 +1895,7 @@ export function initApp() {
   });
 
   // Pannello ricerca: apertura da FAB, ricerca live mentre digiti
-  document.getElementById('btnSearch').addEventListener('click', function () {
-    var p = document.getElementById('searchPanel');
-    var wasOpen = p.classList.contains('open');
-    closeAll();
-    if (!wasOpen) {
-      p.classList.add('open');
-      document.getElementById('searchNote').textContent = '';
-      renderSearchResults();
-      setTimeout(function () { document.getElementById('flightSearch').focus(); }, 250);
-    }
-  });
+  document.getElementById('btnSearch').addEventListener('click', function () { togglePannello('searchPanel'); });
   document.getElementById('flightSearchBtn').addEventListener('click', searchFlight);
   document.getElementById('flightSearch').addEventListener('input', renderSearchResults);
   document.getElementById('flightSearch').addEventListener('keydown', function (e) {
@@ -2086,22 +2100,18 @@ export function initApp() {
   // la consuma chiudendo la finestra piu in alto. Con tutto chiuso, il back
   // esce normalmente.
   function isAnyOpen() {
-    return document.getElementById('board').classList.contains('open') ||
-      document.getElementById('settings').classList.contains('open') ||
-      document.getElementById('searchPanel').classList.contains('open') ||
-      document.getElementById('passes').classList.contains('open') ||
-      document.getElementById('sheet').classList.contains('open') ||
-      document.getElementById('miraOverlay').style.display === 'block' ||
-      document.getElementById('aboveDialog').style.display === 'block' ||
-      document.getElementById('confirmDialog').style.display === 'block';
+    if (SOVRAPPOSTE.some(sovrappostaAperta)) return true;
+    if (pannelloAperto('sheet')) return true;
+    for (var id in PANNELLI) if (pannelloAperto(id)) return true;
+    return false;
   }
   function closeTopmost() {
-    // Ordine dal livello piu "in alto" al piu basso
-    if (document.getElementById('confirmDialog').style.display === 'block') { hideConfirm(); return; }
-    if (document.getElementById('aboveDialog').style.display === 'block') { hideAboveDialog(); return; }
-    if (document.getElementById('miraOverlay').style.display === 'block') { stopMira(); return; }
+    // Le sovrapposte sono gia in ordine di priorita nel registro
+    for (var i = 0; i < SOVRAPPOSTE.length; i++) {
+      if (sovrappostaAperta(SOVRAPPOSTE[i])) { SOVRAPPOSTE[i].chiudi(); return; }
+    }
     if (document.getElementById('sheet').classList.contains('full')) { closeFull(); return; }
-    closeAll(); // pannelli + scheda mini
+    closeAll(); // pannelli + scheda dell'aereo
   }
   var modalActive = false;   // ho una tappa "finestra" nella cronologia?
   var suppressPop = false;   // ignora il prossimo popstate (chiusura via tap)
