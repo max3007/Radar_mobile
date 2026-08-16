@@ -16,6 +16,8 @@ const DICT = {
     'err.apiSaid': 'l\'API risponde: {msg}',
     'hud.apiSuspended': 'DATI AEREI SOSPESI \u00b7 NESSUNA FONTE ATTIVA',
     'attr.flightData': 'voli: {src}',
+    'set.diag': 'DIAGNOSTICA',
+    'diag.ok': 'ok, {n} aerei',
     'obs.locating': 'rilevo posizione…', 'obs.yourPos': 'la tua posizione',
     'obs.anzio': 'Anzio', 'obs.anzioNoGps': 'Anzio (GPS non disp.)', 'obs.anzioHttps': 'Anzio (serve HTTPS)',
     // FAB
@@ -137,6 +139,8 @@ const DICT = {
     'err.apiSaid': 'API says: {msg}',
     'hud.apiSuspended': 'AIRCRAFT DATA SUSPENDED \u00b7 NO ACTIVE SOURCE',
     'attr.flightData': 'flights: {src}',
+    'set.diag': 'DIAGNOSTICS',
+    'diag.ok': 'ok, {n} aircraft',
     'obs.locating': 'locating…', 'obs.yourPos': 'your position',
     'obs.anzio': 'Anzio', 'obs.anzioNoGps': 'Anzio (no GPS)', 'obs.anzioHttps': 'Anzio (needs HTTPS)',
     'fab.above': 'ABOVE\nYOU', 'fab.arriving': 'IN-\nBOUND', 'fab.mira': 'AIM',

@@ -2,6 +2,14 @@ import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  // Marchio di build: serve a sapere con certezza quale versione sta girando
+  // sul telefono. Senza, distinguere "il codice e sbagliato" da "il browser
+  // ha servito una copia in cache" diventa un gioco di indovinelli.
+  define: {
+    __BUILD_ID__: JSON.stringify(
+      new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+    )
+  },
   build: {
     outDir: 'dist'
   },

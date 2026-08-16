@@ -193,6 +193,15 @@ ARRIVO</button>
       <button class="chip" data-lang="en">English</button>
     </div>
     <button id="applyBtn" data-i18n="set.apply">APPLICA</button>
+    <!-- Diagnostica: dice quale versione sta girando e cosa sta chiedendo,
+         cosi non serve indovinare quando i dati non arrivano -->
+    <label data-i18n="set.diag">DIAGNOSTICA</label>
+    <div id="diagBox" style="font-size:9px;color:var(--muted);letter-spacing:0.5px;line-height:1.5;word-break:break-all;">
+      <div>build <span id="diagBuild">--</span></div>
+      <div>fonte <span id="diagSource">--</span></div>
+      <div id="diagUrl"></div>
+      <div id="diagLast"></div>
+    </div>
   </div>
 
   <div id="sheet" class="bsheet">

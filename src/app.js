@@ -1362,6 +1362,19 @@ export function initApp() {
   // ---------- Rete ----------
   var errBar = document.getElementById('errBar');
 
+  // Diagnostica visibile in impostazioni: versione in esecuzione, fonte
+  // attiva, ultimo URL chiamato ed esito. Serve a distinguere subito un
+  // codice sbagliato da una copia vecchia servita dalla cache del browser.
+  var BUILD_ID = (typeof __BUILD_ID__ !== 'undefined') ? __BUILD_ID__ : 'dev';
+  document.getElementById('diagBuild').textContent = BUILD_ID;
+  document.getElementById('diagSource').textContent = SRC.label + ' (' + PLANES_SOURCE + ')';
+  function diag(url, esito) {
+    var u = document.getElementById('diagUrl');
+    var l = document.getElementById('diagLast');
+    if (url != null) u.textContent = url;
+    if (esito != null) l.textContent = new Date().toLocaleTimeString() + ' → ' + esito;
+  }
+
   // L'API pubblica degli aerei accetta circa UNA richiesta al secondo. L'app
   // pero ne fa partire due ravvicinate ogni volta che il pannello IN ARRIVO e
   // aperto (polling nel raggio + scansione a 250 NM), e la seconda veniva
@@ -1439,8 +1452,10 @@ export function initApp() {
     var seq = ++fetchSeq;
     var data;
     // Fase 1: la rete. Solo qui un errore significa davvero "segnale perso".
+    var url = SRC.point(CENTER[0], CENTER[1], radiusNM);
+    diag(url, null);
     try {
-      var res = await apiFetch(SRC.point(CENTER[0], CENTER[1], radiusNM));
+      var res = await apiFetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       data = await res.json();
     } catch (e) {
@@ -1448,8 +1463,9 @@ export function initApp() {
       var why;
       if (/^HTTP /.test(e.message)) why = e.message;          // il server ha risposto male
       else if (navigator.onLine === false) why = t('err.offline');
-      else why = await classifyBlocked(SRC.point(CENTER[0], CENTER[1], radiusNM));
+      else why = await classifyBlocked(url);
       if (seq !== fetchSeq) return;
+      diag(null, why);
       showNetError(why);
       return;
     }
@@ -1459,10 +1475,12 @@ export function initApp() {
     // cambia da fornitore a fornitore: lo sa la fonte, non noi.
     var apiErr = SRC.errorOf(data);
     if (apiErr) {
+      diag(null, String(apiErr).slice(0, 60));
       showNetError(t('err.apiSaid', { msg: String(apiErr).slice(0, 90) }), true);
       return;
     }
     lastAircraft = trimToRadius(data.ac || [], radiusNM);
+    diag(null, t('diag.ok', { n: lastAircraft.length }));
     clearNetError();
 
     // Fase 2: il disegno. Un errore qui e un bug nostro, non un problema di
