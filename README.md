@@ -11,8 +11,15 @@ Funzionalità principali:
 - **stili mappa** selezionabili: rilievo (default), satellite, radar scuro;
 - **aeroporti** nel raggio con sigla e nome (tap per il dettaglio);
 - overlay **incendi** attivabile: rilevamenti satellitari EFFIS/Copernicus
-  (WMS pubblico, senza chiave) sovrapposti alla mappa — utile per capire dove
-  operano i Canadair antincendio;
+  (WMS pubblico, senza chiave) sovrapposti alla mappa;
+- overlay **aree bruciate**: perimetri degli incendi recenti, con legenda —
+  il colore indica quanto è recente (rosso: ultime 24 ore, arancione: ultimi
+  7 giorni, blu: precedenti);
+- riconoscimento degli **aerei antincendio** (Canadair CL-215/CL-415), con
+  evidenza rafforzata quando risultano vicini a un incendio attivo;
+- pannello **diagnostica** in fondo alle impostazioni: versione in esecuzione,
+  fonte attiva, ultimo indirizzo chiamato ed esito — la prima cosa da
+  guardare se i dati non arrivano;
 - riconoscimento dei falsi "a terra": il flag ADS-B `ground` a velocità di
   volo (es. un aereo a 200 kt in avvicinamento) viene mostrato come in volo a
   bassa quota, non a terra;
@@ -47,8 +54,10 @@ Funzionalità principali:
   un luogo per nome o salvando il centro della mappa), con selezione
   immediata; preferenze e postazioni persistono tra le sessioni.
 
-Dati forniti da API pubbliche gratuite chiamate direttamente dal client:
-[airplanes.live](https://airplanes.live) (posizioni ADS-B),
+Dati forniti da API pubbliche gratuite chiamate dal client:
+[adsb.fi](https://adsb.fi) (posizioni ADS-B — la fonte è configurabile in
+`src/config.js`; le chiamate passano dal nostro dominio perché adsb.fi non
+invia le intestazioni CORS),
 [adsbdb.com](https://www.adsbdb.com) (rotte),
 [planespotters.net](https://www.planespotters.net) (foto),
 [Nominatim/OpenStreetMap](https://nominatim.openstreetmap.org) (ricerca
@@ -60,7 +69,9 @@ satellite) e [CARTO](https://carto.com)/OSM (radar scuro).
 ```bash
 npm install
 npm run dev       # server di sviluppo (http://localhost:5173)
-npm test          # unit test delle funzioni di dominio
+npm test          # unit test delle funzioni pure (Vitest)
+npm run test:e2e  # prove dell'interfaccia su browser vero (Playwright)
+npm run test:all  # entrambi
 npm run build     # build di produzione in dist/
 npm run preview   # anteprima della build
 ```

@@ -22,7 +22,9 @@ framework — scelta deliberata: il cuore è codice imperativo Leaflet).
 ```bash
 npm install
 npm run dev        # sviluppo (http://localhost:5173)
-npm test           # oppure: npx vitest run   (85 test)
+npm test           # unit test funzioni pure (90)
+npm run test:e2e   # prove interfaccia su browser vero (25)
+npm run test:all   # entrambi
 npm run build      # produzione in dist/
 npm run preview    # anteprima build (http://localhost:4173)
 ```
@@ -40,7 +42,8 @@ src/app.js          TUTTA la logica applicativa (una grande initApp con chiusure
                     postazioni, IN ARRIVO, incendi, follow/avvisi, tasto back)
 src/domain.js       funzioni PURE e testate: airlineName, toCallsign, fmtFlight,
                     compass, bearing*, elevationAngle, destPoint, altColor,
-                    planeColor, altLabel, isOnGround, emergencyInfo, flightPhase,
+                    planeColor, altLabel, isOnGround, emergencyInfo,
+                    flightPhaseInfo (codice+testo) e flightPhase (solo testo),
                     routeConsistent, nextPass (CPA), landingBeforePass,
                     isFirefightingAircraft (Canadair/water bomber)
 src/i18n.js         dizionari it/en + t(key,params) + applyStaticI18n + compassDirs
@@ -52,6 +55,8 @@ src/data/*.json     airlines (ICAO→nome), iata2icao, airports
 src/styles.css      tutti gli stili (tema "fosforo" HUD)
 tests/domain.test.js unit test delle funzioni pure
 tests/sources.test.js  fonti dati: URL, rilevamento errori, dati reali adsb.fi
+tests/e2e/          prove dell'interfaccia con Playwright (browser vero)
+playwright.config.js  configurazione delle prove e2e
 legacy/             prototipo originale a file singolo (baseline)
 scripts/make-icons.mjs  genera le icone PWA (uso una tantum)
 ```
@@ -61,12 +66,18 @@ scripts/make-icons.mjs  genera le icone PWA (uso una tantum)
 - **Branch**: sviluppo su `claude/app-development-plan-5m66ct`, poi
   fast-forward su `main` e push di entrambi. (Se il flusso cambia, chiedere.)
 - **README nello stesso commit** della feature: tenerlo sempre allineato.
-- **Ogni modifica**: `npm run build` + `npx vitest run` verdi prima di
-  committare; per le UI, verifica con Playwright headless (vedi sotto).
+- **Ogni modifica**: `npm run build` + `npm run test:all` verdi prima di
+  committare. Se tocchi l'interfaccia, aggiungi un caso in `tests/e2e/`.
 - Commit in italiano, descrittivi. NON inserire l'ID del modello nei commit.
 - **i18n**: ogni nuova stringa visibile va aggiunta a `src/i18n.js` (it + en)
-  e richiamata con `t('chiave')` (JS) o `data-i18n="chiave"` (HTML statico).
-  Le funzioni di dominio che producono testo importano `t` da i18n.
+  e richiamata con `t('chiave')` (JS) o, nell'HTML, `data-i18n`,
+  `data-i18n-ph`, `data-i18n-title`, `data-i18n-aria`, `data-i18n-alt`.
+  DUE trappole gia costate tempo: (1) NON far dipendere la logica dal testo
+  tradotto — l'icona di fase volo confrontava `indexOf('SALITA')` e in
+  inglese non funzionava piu; usare un codice separato, vedi
+  `flightPhaseInfo`. (2) Cio che l'app scrive da sola non lo ridisegna
+  `applyStaticI18n`: va aggiunto a `ridisegnaTestiDinamici()` in `app.js`,
+  altrimenti resta nella lingua vecchia.
 - **prefs**: nuove preferenze → aggiungere in `buildPrefs()` e nel blocco di
   load in `initApp` (validando il tipo).
 
@@ -77,12 +88,20 @@ Playwright headless con Chromium pre-installato, mockando le API di volo. Es.:
 import { chromium } from 'playwright';
 const b = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium', args:['--no-sandbox'] });
 const ctx = await b.newContext({ viewport:{width:390,height:844} });
-await ctx.route('**/api.airplanes.live/**', r => r.fulfill({ json:{ ac:[/* aerei mock */] }}));
+await ctx.route('**/adsb/**', r => r.fulfill({ json:{ ac:[/* aerei mock */] }}));
 await ctx.route('**/server.arcgisonline.com/**', r => r.abort()); // tile mappa
 // ... apri http://localhost:4173, interagisci, asserisci
 ```
 Nel sandbox le tile mappa e le API esterne sono spesso bloccate dal proxy: si
 verifica la LOGICA (URL/parametri, stato UI), non il rendering delle tile reali.
+
+**Ma per le verifiche vere ora ci sono i test end-to-end**, in `tests/e2e/`,
+con Playwright fra le dipendenze: `npm run test:e2e`. Le prove usano risposte
+REALI di adsb.fi come dati di partenza (`tests/e2e/fixtures.js`) e coprono
+avvio, ritorno dal background, i tre stati del banner di errore, il cambio
+lingua con un errore visibile, pannelli e tasto BACK. Scrivere script
+usa-e-getta come si faceva prima significa buttare via la verifica appena
+fatta: meglio aggiungere un caso li.
 
 ## Funzionalità implementate
 
@@ -104,6 +123,27 @@ riconosce gli aerei antincendio (Canadair CL-215/CL-415, per codice tipo ICAO
 o descrizione) e li evidenzia con colore/icona dedicati; se rilevati vicino a
 un hotspot attivo (verifica via WMS GetFeatureInfo, best-effort) l'evidenza
 si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda).
+
+## Due registri da cui deriva il resto (esito del refactoring)
+
+Erano i due punti dove la duplicazione causava bug veri, ora hanno un elenco
+unico da cui tutto si ricava:
+
+- **`chiediVoli(url)`** e l'UNICO modo di interrogare i dati di volo. Applica
+  sempre, nello stesso ordine: interruttore generale, turno nella coda del
+  limite di richieste, scadenza, controllo dell'errore nel corpo della
+  risposta, diagnostica. Prima ogni chiamante ne applicava un sottoinsieme
+  diverso: per questo la ricerca volo diceva "non in volo" quando la fonte
+  aveva rifiutato. Non aggiungere `fetch` diretti verso i voli.
+- **`PANNELLI` + `SOVRAPPOSTE`** descrivono le finestre. `closeAll`,
+  `isAnyOpen` e `closeTopmost` si ricavano da li; `togglePannello(id)` apre e
+  chiude. L'ordine di `SOVRAPPOSTE` E la priorita del tasto BACK. Aggiungere
+  una finestra costa una riga: prima l'elenco era ripetuto in tre posti e
+  dimenticarne uno rompeva il BACK in silenzio.
+
+Il banner di errore conserva **chiave e parametri**, non la frase tradotta:
+solo cosi si ridisegna nella lingua giusta. Se ci si mette il testo gia
+tradotto, al cambio lingua resta mezzo in italiano.
 
 ## FONTE DEI DATI DI VOLO — leggere prima di toccarla
 
@@ -234,7 +274,7 @@ aggiornare quella costante e il modo piu rapido per validare il cambio.
   rifiutata e in app si leggeva "SEGNALE PERSO" senza motivo apparente. Ora
   tutte le chiamate a quell'API passano da `apiFetch`, che prenota a ciascuna
   un turno a distanza di `API_MIN_GAP_MS` (1,1 s). Se in futuro si aggiungono
-  chiamate a `api.airplanes.live`, vanno fatte con `apiFetch`, non con `fetch`.
+  chiamate ai dati di volo, vanno fatte con `chiediVoli()`, non con `fetch`.
 - **Il banner rosso distingue tre casi diversi**: rete irraggiungibile,
   rifiuto del server (mostra il codice, es. HTTP 429) ed errore di disegno
   ("ERRORE INTERNO"). Prima qualsiasi eccezione JS nel rendering finiva nello
