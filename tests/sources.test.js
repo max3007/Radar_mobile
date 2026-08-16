@@ -47,9 +47,16 @@ describe('costruzione URL', () => {
   const fi = PLANES_SOURCES.adsbfi;
   const al = PLANES_SOURCES.airplaneslive;
 
-  it('adsb.fi usa la forma /v3/lat/../lon/../dist/..', () => {
-    expect(fi.point(41.4479, 12.6285, 100))
-      .toBe('https://opendata.adsb.fi/api/v3/lat/41.4479/lon/12.6285/dist/100');
+  it('adsb.fi passa dal nostro dominio (/adsb), non da opendata.adsb.fi', () => {
+    // Chiamare direttamente il loro host fa fallire il browser per CORS:
+    // l'URL DEVE restare relativo, cioe same-origin. Vedi vercel.json.
+    const u = fi.point(41.4479, 12.6285, 100);
+    expect(u).toBe('/adsb/v3/lat/41.4479/lon/12.6285/dist/100');
+    expect(u.startsWith('/')).toBe(true);
+    expect(u).not.toContain('opendata.adsb.fi');
+  });
+  it('anche la ricerca per callsign resta same-origin', () => {
+    expect(fi.callsign('ITY088')).toBe('/adsb/v2/callsign/ITY088');
   });
   it('airplanes.live usa la forma /v2/point/../../..', () => {
     expect(al.point(41.4479, 12.6285, 100))
@@ -60,8 +67,7 @@ describe('costruzione URL', () => {
     expect(al.callsign('ITY 088')).toContain('ITY%20088');
   });
   it('coordinate negative (emisfero sud/ovest) restano intatte', () => {
-    expect(fi.point(-33.87, -151.21, 50))
-      .toBe('https://opendata.adsb.fi/api/v3/lat/-33.87/lon/-151.21/dist/50');
+    expect(fi.point(-33.87, -151.21, 50)).toBe('/adsb/v3/lat/-33.87/lon/-151.21/dist/50');
   });
 });
 

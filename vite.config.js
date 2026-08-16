@@ -1,7 +1,23 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// opendata.adsb.fi non manda le intestazioni CORS, quindi il browser rifiuta
+// la risposta quando la richiesta parte da una pagina web (mentre aprendo
+// l'URL a mano funziona: la navigazione diretta non passa dal controllo CORS).
+// Le chiamate passano percio dal nostro stesso dominio, sotto /adsb: in
+// produzione le inoltra Vercel (vercel.json), qui in sviluppo e in anteprima
+// le inoltra Vite. Le due configurazioni devono restare allineate.
+const adsbProxy = {
+  '/adsb': {
+    target: 'https://opendata.adsb.fi',
+    changeOrigin: true,
+    rewrite: function (p) { return p.replace(/^\/adsb/, '/api'); }
+  }
+};
+
 export default defineConfig({
+  server: { proxy: adsbProxy },
+  preview: { proxy: adsbProxy },
   // Marchio di build: serve a sapere con certezza quale versione sta girando
   // sul telefono. Senza, distinguere "il codice e sbagliato" da "il browser
   // ha servito una copia in cache" diventa un gioco di indovinelli.

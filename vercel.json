@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/adsb/:path*",
+      "destination": "https://opendata.adsb.fi/api/:path*"
+    }
+  ]
+}

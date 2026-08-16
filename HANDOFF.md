@@ -22,7 +22,7 @@ framework — scelta deliberata: il cuore è codice imperativo Leaflet).
 ```bash
 npm install
 npm run dev        # sviluppo (http://localhost:5173)
-npm test           # oppure: npx vitest run   (84 test)
+npm test           # oppure: npx vitest run   (85 test)
 npm run build      # produzione in dist/
 npm run preview    # anteprima build (http://localhost:4173)
 ```
@@ -47,6 +47,7 @@ src/i18n.js         dizionari it/en + t(key,params) + applyStaticI18n + compassD
 src/config.js       costanti: centro, raggio, polling, stili mappa, soglie IN
                     ARRIVO, FIRE_WMS (incendi), PLANES_SOURCES (fonti dati voli)
 src/prefs.js        load/save preferenze (localStorage 'radarPrefs')
+vercel.json         inoltro /adsb/* -> opendata.adsb.fi (aggira il CORS)
 src/data/*.json     airlines (ICAO→nome), iata2icao, airports
 src/styles.css      tutti gli stili (tema "fosforo" HUD)
 tests/domain.test.js unit test delle funzioni pure
@@ -120,6 +121,36 @@ La fonte e **configurabile**: `PLANES_SOURCES` + `PLANES_SOURCE` in
   messaggio da IP diversi, da VPN e da un servizio terzo — cioe una
   restrizione generale, non un blocco contro di noi. La definizione resta
   in `config.js` pronta all'uso se un giorno autorizzano.
+
+### ⚠️ adsb.fi si chiama SOLO tramite il nostro dominio (CORS)
+
+`opendata.adsb.fi` **non manda le intestazioni CORS**, quindi il browser
+rifiuta la risposta quando la richiesta parte da una pagina web — mentre
+aprendo lo stesso URL a mano nella barra degli indirizzi funziona, perche la
+navigazione diretta non passa dal controllo CORS. Sintomo ingannevole: la
+richiesta fallisce **senza nemmeno una risposta HTTP**, indistinguibile a
+occhio da "rete assente".
+
+Percio gli URL della fonte `adsbfi` sono **relativi** (`/adsb/...`) e vengono
+inoltrati a `https://opendata.adsb.fi/api/...`:
+
+- in produzione da **`vercel.json`** (rewrite)
+- in sviluppo e anteprima da **`vite.config.js`** (`server.proxy` e
+  `preview.proxy`)
+
+**I tre file devono restare allineati.** Se in `config.js` cambia il prefisso
+`/adsb`, vanno aggiornati anche gli altri due, altrimenti l'app chiama un
+percorso che nessuno inoltra. Un test in `tests/sources.test.js` verifica che
+l'URL resti relativo, proprio per non ricascarci.
+
+Effetto collaterale da sapere: le richieste arrivano ad adsb.fi dall'IP di
+Vercel, non dal telefono. Loro limitano a 1 richiesta/secondo **per IP**: per
+un'app personale e irrilevante, ma se un giorno l'app avesse molti utenti
+converrebbe ripensarci.
+
+Per capire al volo se un fallimento e CORS o rete: `classifyBlocked()` in
+`app.js` fa una sonda in modalita `no-cors` (che non richiede il permesso
+CORS) e distingue i due casi nel banner.
 
 Due differenze fra le due che il codice gia gestisce, da tenere presenti se
 si aggiunge una terza fonte:

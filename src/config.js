@@ -80,12 +80,22 @@ export const PLANES_SOURCES = {
   adsbfi: {
     label: 'adsb.fi',
     attribution: '<a href="https://adsb.fi/">adsb.fi</a>',
+    // ATTENZIONE: NON si chiama opendata.adsb.fi direttamente.
+    // Il loro servizio non manda le intestazioni CORS, quindi il browser
+    // rifiuta la risposta quando la richiesta parte da una pagina web —
+    // mentre aprendo lo stesso URL a mano funziona, perche la navigazione
+    // diretta non passa dal controllo CORS. Sintomo: la richiesta fallisce
+    // senza nemmeno una risposta HTTP.
+    // Quindi chiamiamo il NOSTRO stesso dominio sotto /adsb, che inoltra a
+    // https://opendata.adsb.fi/api/... : in produzione via vercel.json, in
+    // sviluppo via vite.config.js. Essendo same-origin, il CORS non entra
+    // in gioco. Toccando questi percorsi vanno aggiornati entrambi i file.
     point: function (lat, lon, radiusNM) {
       // Raggio massimo consentito: 250 NM
-      return 'https://opendata.adsb.fi/api/v3/lat/' + lat + '/lon/' + lon + '/dist/' + radiusNM;
+      return '/adsb/v3/lat/' + lat + '/lon/' + lon + '/dist/' + radiusNM;
     },
     callsign: function (cs) {
-      return 'https://opendata.adsb.fi/api/v2/callsign/' + encodeURIComponent(cs);
+      return '/adsb/v2/callsign/' + encodeURIComponent(cs);
     },
     // Restituisce anche aerei un po' oltre il raggio chiesto (verificato:
     // con dist=3 sono arrivati aerei a 4,0 e 5,7 NM), quindi rifiliamo noi.
