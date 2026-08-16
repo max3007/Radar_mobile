@@ -37,15 +37,20 @@ export function fmtFlight(s) {
 // Aereo davvero a terra: il flag ADS-B 'ground' e attendibile solo a bassa
 // velocita. A 200 kt l'aereo e in volo (basso o dato errato), non a terra.
 var GROUND_MAX_KT = 80;
+// La quota "a terra" arriva come stringa 'ground'. Confronto tollerante a
+// maiuscole e spazi: le fonti sono diverse e non tutte identiche nel formato.
+export function isGroundAlt(alt) {
+  return typeof alt === 'string' && alt.trim().toLowerCase() === 'ground';
+}
 export function isOnGround(ac) {
-  if (!ac || ac.alt_baro !== 'ground') return false;
+  if (!ac || !isGroundAlt(ac.alt_baro)) return false;
   return ac.gs == null || ac.gs < GROUND_MAX_KT;
 }
 
 // Etichetta di quota, consapevole dei falsi "ground"
 export function altLabel(ac, short) {
   if (isOnGround(ac)) return short ? t('alt.groundShort') : t('alt.ground');
-  if (ac.alt_baro === 'ground') return t('alt.low'); // in volo ma quota non riportata
+  if (isGroundAlt(ac.alt_baro)) return t('alt.low'); // in volo ma quota non riportata
   return ac.alt_baro != null ? ac.alt_baro + ' ft' : (short ? '' : '--');
 }
 
@@ -65,7 +70,7 @@ export function planeColor(ac, isSel) {
   if (isSel) return '#f2fff8';
   if (isFirefightingAircraft(ac)) return '#ff6a00';
   if (isOnGround(ac)) return altColor('ground', isSel);
-  if (ac.alt_baro === 'ground') return altColor(500, isSel); // in volo basso
+  if (isGroundAlt(ac.alt_baro)) return altColor(500, isSel); // in volo basso
   return altColor(ac.alt_baro, isSel);
 }
 
@@ -270,6 +275,6 @@ export function flightPhase(ac) {
   }
   if (typeof ac.alt_baro === 'number' && ac.alt_baro > 24000) return t('phase.cruise');
   // Flag 'ground' ma in volo (velocita alta): e basso, tipicamente in manovra
-  if (ac.alt_baro === 'ground') return t('phase.approach');
+  if (isGroundAlt(ac.alt_baro)) return t('phase.approach');
   return t('phase.level');
 }

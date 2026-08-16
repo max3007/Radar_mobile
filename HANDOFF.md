@@ -22,7 +22,7 @@ framework — scelta deliberata: il cuore è codice imperativo Leaflet).
 ```bash
 npm install
 npm run dev        # sviluppo (http://localhost:5173)
-npm test           # oppure: npx vitest run   (65 test)
+npm test           # oppure: npx vitest run   (84 test)
 npm run build      # produzione in dist/
 npm run preview    # anteprima build (http://localhost:4173)
 ```
@@ -44,12 +44,13 @@ src/domain.js       funzioni PURE e testate: airlineName, toCallsign, fmtFlight,
                     routeConsistent, nextPass (CPA), landingBeforePass,
                     isFirefightingAircraft (Canadair/water bomber)
 src/i18n.js         dizionari it/en + t(key,params) + applyStaticI18n + compassDirs
-src/config.js       costanti: centro, raggio, polling, URL API, stili mappa,
-                    soglie IN ARRIVO, FIRE_WMS (incendi: hotspot + aree bruciate)
+src/config.js       costanti: centro, raggio, polling, stili mappa, soglie IN
+                    ARRIVO, FIRE_WMS (incendi), PLANES_SOURCES (fonti dati voli)
 src/prefs.js        load/save preferenze (localStorage 'radarPrefs')
 src/data/*.json     airlines (ICAO→nome), iata2icao, airports
 src/styles.css      tutti gli stili (tema "fosforo" HUD)
 tests/domain.test.js unit test delle funzioni pure
+tests/sources.test.js  fonti dati: URL, rilevamento errori, dati reali adsb.fi
 legacy/             prototipo originale a file singolo (baseline)
 scripts/make-icons.mjs  genera le icone PWA (uso una tantum)
 ```
@@ -103,30 +104,43 @@ o descrizione) e li evidenzia con colore/icona dedicati; se rilevati vicino a
 un hotspot attivo (verifica via WMS GetFeatureInfo, best-effort) l'evidenza
 si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda).
 
-## ⚠️ STATO ATTUALE: dati aerei sospesi (2026-08-12)
+## FONTE DEI DATI DI VOLO — leggere prima di toccarla
 
-`PLANES_API_ENABLED = false` in `src/config.js`: **l'app non chiama piu
-l'API dei voli**. airplanes.live ha chiuso l'accesso pubblico e risponde a
-ogni richiesta con «Please contact us at contact@airplanes.live. Your email
-MUST include a link to your project if you have one, a description of the
-project, and what your user base is.»
+La fonte e **configurabile**: `PLANES_SOURCES` + `PLANES_SOURCE` in
+`src/config.js`. Ogni fonte espone la stessa interfaccia (`point()`,
+`callsign()`, `errorOf()`, `attribution`, `trimToRadius`), quindi
+**cambiare fornitore e una riga** e non tocca la logica dell'app.
 
-Non e un limite temporaneo di traffico: e una procedura di autorizzazione.
-Verificato che NON dipende da noi — il blocco arriva identico aprendo l'URL
-a mano nel browser (senza `origin`/`referer` dell'app) e anche da VPN, cioe
-da un IP completamente diverso.
+- **Attiva: `adsbfi`** (opendata.adsb.fi). Nessuna chiave, nessuna
+  registrazione, uso personale non commerciale, 1 richiesta/secondo.
+- **`airplaneslive`: NON utilizzabile.** Il 2026-08-12 hanno chiuso
+  l'accesso pubblico: rispondono a qualsiasi richiesta non autorizzata
+  chiedendo di scrivere a contact@airplanes.live con link al progetto,
+  descrizione e platea di utenti. **Non era un problema nostro**: stesso
+  messaggio da IP diversi, da VPN e da un servizio terzo — cioe una
+  restrizione generale, non un blocco contro di noi. La definizione resta
+  in `config.js` pronta all'uso se un giorno autorizzano.
 
-Il resto dell'app funziona (mappa, aeroporti, postazioni, incendi) e mostra
-il messaggio «DATI AEREI SOSPESI». **Per riaccendere, una volta ottenuta
-l'autorizzazione: rimettere `PLANES_API_ENABLED = true`.** Il blocco e su
-tre livelli (polling, scansione IN ARRIVO, ricerca volo) piu una barriera
+Due differenze fra le due che il codice gia gestisce, da tenere presenti se
+si aggiunge una terza fonte:
+
+- **Dove sta l'errore**: adsb.fi lo mette in `msg` (vale `"No error"` quando
+  va tutto bene), airplanes.live in `error`. Entrambi con HTTP 200: senza
+  `errorOf()` un rifiuto sembrerebbe una risposta valida con zero aerei.
+- **Il raggio**: adsb.fi restituisce anche aerei oltre il raggio richiesto
+  (con `dist=3` sono arrivati aerei a 4,0 e 5,7 NM), per questo ha
+  `trimToRadius: true` e `trimToRadius()` in `app.js` rifila usando il campo
+  `dst` (distanza in NM dal punto interrogato) quando c'e.
+
+`PLANES_API_ENABLED` resta come interruttore generale: a `false` l'app non
+contatta nessuna fonte e lo dichiara, invece di sembrare rotta. Il blocco e
+su tre livelli (polling, scansione IN ARRIVO, ricerca volo) piu una barriera
 finale dentro `apiFetch`, cosi nessun ramo dimenticato puo far partire una
 richiesta.
 
-Se invece si decide di cambiare fonte dati, i punti da toccare sono `API`
-in `src/config.js` e i tre chiamanti di `apiFetch` in `src/app.js`; il
-formato atteso e quello di airplanes.live (`{ac: [...]}` con i campi hex,
-flight, lat, lon, alt_baro, gs, track, t, desc...).
+I test in `tests/sources.test.js` girano su una **risposta reale** di
+adsb.fi catturata dal campo: se si cambia fonte, catturarne una nuova e
+aggiornare quella costante e il modo piu rapido per validare il cambio.
 
 ## DA VERIFICARE SUL CAMPO (non testabile in sandbox)
 

@@ -55,22 +55,71 @@ export const FIRE_WMS = {
   burnt: { layers: 'effis.nrt.ba.poly', days: 30 }
 };
 
-// INTERRUTTORE GENERALE delle chiamate ai dati di volo.
-// Messo a false il 2026-08-12: airplanes.live ha sospeso l'accesso pubblico e
-// risponde a ogni richiesta con
-//   "Please contact us at contact@airplanes.live. Your email MUST include a
-//    link to your project if you have one, a description of the project, and
-//    what your user base is."
-// Non e un limite temporaneo di traffico ma una procedura di autorizzazione:
-// continuare a interrogarli sarebbe inutile e scortese. L'app resta viva
-// (mappa, aeroporti, incendi, postazioni) e spiega perche mancano gli aerei.
-// PER RIACCENDERE, una volta ottenuta l'autorizzazione: rimettere true.
-export const PLANES_API_ENABLED = false;
+// INTERRUTTORE GENERALE delle chiamate ai dati di volo: a false l'app non
+// contatta nessuna fonte e lo dice apertamente, invece di sembrare rotta.
+// Serve se anche la fonte attiva dovesse chiudere l'accesso.
+export const PLANES_API_ENABLED = true;
+
+// ---------------------------------------------------------------------------
+// FONTI DEI DATI DI VOLO
+//
+// Parlano tutte il formato ADSBexchange v2 (`{ac: [...]}` con hex, flight,
+// lat, lon, alt_baro, gs, track, t, desc...), quindi cambiare fonte NON tocca
+// la logica dell'app: cambia solo come si compone l'URL e dove si legge un
+// eventuale errore. Per cambiare fornitore basta cambiare PLANES_SOURCE.
+//
+// Storia, perche non si ripeta la ricerca a vuoto: airplanes.live ha chiuso
+// l'accesso pubblico il 2026-08-12 e ora risponde a QUALSIASI richiesta non
+// autorizzata chiedendo di scrivere a contact@airplanes.live con link al
+// progetto, descrizione e platea di utenti. Verificato che non dipendeva da
+// noi: stesso messaggio da IP diversi, da VPN e da un servizio terzo.
+// ---------------------------------------------------------------------------
+export const PLANES_SOURCES = {
+  // Attiva. Nessuna chiave, nessuna registrazione, uso personale non
+  // commerciale, 1 richiesta/secondo. https://github.com/adsbfi/opendata
+  adsbfi: {
+    label: 'adsb.fi',
+    attribution: '<a href="https://adsb.fi/">adsb.fi</a>',
+    point: function (lat, lon, radiusNM) {
+      // Raggio massimo consentito: 250 NM
+      return 'https://opendata.adsb.fi/api/v3/lat/' + lat + '/lon/' + lon + '/dist/' + radiusNM;
+    },
+    callsign: function (cs) {
+      return 'https://opendata.adsb.fi/api/v2/callsign/' + encodeURIComponent(cs);
+    },
+    // Restituisce anche aerei un po' oltre il raggio chiesto (verificato:
+    // con dist=3 sono arrivati aerei a 4,0 e 5,7 NM), quindi rifiliamo noi.
+    trimToRadius: true,
+    // L'esito sta in `msg`, che vale "No error" quando e tutto a posto
+    errorOf: function (data) {
+      if (!data) return null;
+      var m = data.msg;
+      return (typeof m === 'string' && m.toLowerCase() !== 'no error') ? m : null;
+    }
+  },
+  // Non utilizzabile senza autorizzazione (vedi sopra). Tenuta qui pronta:
+  // se rispondono all'email basta cambiare PLANES_SOURCE.
+  airplaneslive: {
+    label: 'airplanes.live',
+    attribution: '<a href="https://airplanes.live/">airplanes.live</a>',
+    point: function (lat, lon, radiusNM) {
+      return 'https://api.airplanes.live/v2/point/' + lat + '/' + lon + '/' + radiusNM;
+    },
+    callsign: function (cs) {
+      return 'https://api.airplanes.live/v2/callsign/' + encodeURIComponent(cs);
+    },
+    trimToRadius: false,
+    // Qui l'errore arriva nel campo `error`, con HTTP 200
+    errorOf: function (data) {
+      return (data && data.error) ? data.error : null;
+    }
+  }
+};
+
+// La fonte in uso: cambiare QUESTA riga per cambiare fornitore.
+export const PLANES_SOURCE = 'adsbfi';
 
 export const API = {
-  // Posizioni ADS-B in tempo reale (gratuita, senza chiave)
-  planesPoint: 'https://api.airplanes.live/v2/point/',       // + lat/lon/raggioNM
-  planesCallsign: 'https://api.airplanes.live/v2/callsign/', // + callsign
   // Rotte volo (gratuita, senza chiave)
   routeCallsign: 'https://api.adsbdb.com/v0/callsign/',      // + callsign
   // Foto aerei

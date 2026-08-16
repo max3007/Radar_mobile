@@ -5,7 +5,10 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
-import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN, FIRE_WMS, PLANES_API_ENABLED } from './config.js';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN, FIRE_WMS, PLANES_API_ENABLED, PLANES_SOURCES, PLANES_SOURCE } from './config.js';
+
+// Fonte dei dati di volo in uso (vedi PLANES_SOURCES in config.js)
+var SRC = PLANES_SOURCES[PLANES_SOURCE];
 import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, altColor, planeColor, altLabel, isOnGround, compass,
@@ -109,6 +112,8 @@ export function initApp() {
     attributionControl: true
   }).setView(CENTER, 8);
   map.attributionControl.setPrefix(false);
+  // Credito alla fonte dei dati di volo, accanto a quello delle mappe
+  map.attributionControl.addAttribution(t('attr.flightData', { src: SRC.attribution }));
 
   // Basemap selezionabile dalle impostazioni (persistente nelle preferenze)
   var tileLayer = null;
@@ -790,7 +795,10 @@ export function initApp() {
     else { rEl.textContent = 'dritto'; }
     document.getElementById('shWind').textContent = (ac.ws != null && ac.wd != null)
       ? Math.round(ac.ws) + ' kt ' + compass(ac.wd) : '--';
-    document.getElementById('shOat').textContent = ac.oat != null ? Math.round(ac.oat) + '\u00B0C' : '--';
+    // Temperatura esterna: gli aerei a volte trasmettono valori assurdi
+    // (visto -229 C a 2650 ft), meglio non mostrarli che mostrarli sbagliati
+    var oatOk = (typeof ac.oat === 'number' && ac.oat > -100 && ac.oat < 60);
+    document.getElementById('shOat').textContent = oatOk ? Math.round(ac.oat) + '\u00B0C' : '--';
 
     // --- Operatore e categoria (il modello e gia in evidenza nell'header) ---
     var descEl = document.getElementById('shDesc');
@@ -1039,11 +1047,12 @@ export function initApp() {
     if (!isPassesOpen()) return;
     var seq = ++passScanSeq;
     try {
-      var res = await apiFetch(API.planesPoint + CENTER[0] + '/' + CENTER[1] + '/' + PASS_SCAN_NM);
+      var res = await apiFetch(SRC.point(CENTER[0], CENTER[1], PASS_SCAN_NM));
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var data = await res.json();
       if (seq !== passScanSeq || !isPassesOpen()) return;
-      passAircraft = data.ac || [];
+      if (SRC.errorOf(data)) throw new Error('API'); // ripiega sul set nel raggio
+      passAircraft = trimToRadius(data.ac || [], PASS_SCAN_NM);
     } catch (e) {
       if (seq !== passScanSeq) return;
       passAircraft = lastAircraft; // fallback al set nel raggio corrente
@@ -1358,6 +1367,20 @@ export function initApp() {
   // aperto (polling nel raggio + scansione a 250 NM), e la seconda veniva
   // rifiutata: in app si vedeva "SEGNALE PERSO" senza motivo apparente.
   // Qui le mettiamo in fila, prenotando a ciascuna il suo turno.
+  // Alcune fonti restituiscono anche aerei un po' oltre il raggio richiesto
+  // (adsb.fi filtra per riquadro, non per cerchio): senza questo taglio si
+  // vedrebbero aerei fuori dall'anello piu esterno del radar. Il campo `dst`
+  // e la distanza in NM dal punto interrogato, quando la fonte la fornisce.
+  function trimToRadius(list, radiusNM) {
+    if (!SRC.trimToRadius) return list;
+    return list.filter(function (a) {
+      if (a.lat == null || a.lon == null) return true; // ci pensa gia drawPlanes
+      var nm = (typeof a.dst === 'number') ? a.dst
+             : map.distance([a.lat, a.lon], CENTER) / 1852;
+      return nm <= radiusNM;
+    });
+  }
+
   var API_MIN_GAP_MS = 1100;
   var nextApiSlot = 0;
   function apiFetch(url) {
@@ -1404,7 +1427,7 @@ export function initApp() {
     var data;
     // Fase 1: la rete. Solo qui un errore significa davvero "segnale perso".
     try {
-      var res = await apiFetch(API.planesPoint + CENTER[0] + '/' + CENTER[1] + '/' + radiusNM);
+      var res = await apiFetch(SRC.point(CENTER[0], CENTER[1], radiusNM));
       if (!res.ok) throw new Error('HTTP ' + res.status);
       data = await res.json();
     } catch (e) {
@@ -1420,15 +1443,15 @@ export function initApp() {
       return;
     }
     if (seq !== fetchSeq) return; // risposta superata da una piu recente: scarta
-    // L'API puo rispondere con successo ma con un corpo di errore: e cosi che
-    // airplanes.live comunica di aver bloccato il client
-    // ({"error": "please contact us at ..."}). Senza questo controllo l'app
-    // mostrava solo zero contatti, senza dire perche.
-    if (data && data.error) {
-      showNetError(t('err.apiSaid', { msg: String(data.error).slice(0, 90) }), true);
+    // La fonte puo rispondere con successo ma con un corpo di errore (e cosi
+    // che airplanes.live comunicava il blocco). Dove sta scritto l'errore
+    // cambia da fornitore a fornitore: lo sa la fonte, non noi.
+    var apiErr = SRC.errorOf(data);
+    if (apiErr) {
+      showNetError(t('err.apiSaid', { msg: String(apiErr).slice(0, 90) }), true);
       return;
     }
-    lastAircraft = data.ac || [];
+    lastAircraft = trimToRadius(data.ac || [], radiusNM);
     clearNetError();
 
     // Fase 2: il disegno. Un errore qui e un bug nostro, non un problema di
@@ -1675,7 +1698,7 @@ export function initApp() {
     var cs = toCallsign(raw);
     note.textContent = t('search.searching', { cs: cs });
     try {
-      var res = await apiFetch(API.planesCallsign + encodeURIComponent(cs));
+      var res = await apiFetch(SRC.callsign(cs));
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var data = await res.json();
       var list = (data.ac || []).filter(function (a) { return a.lat != null && a.lon != null; });
