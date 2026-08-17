@@ -17,6 +17,7 @@ import {
 } from './domain.js';
 import { t, setLang, detectLang, applyStaticI18n } from './i18n.js';
 import { creaCoda, fetchConScadenza, creaCanaleVoli, API_MIN_GAP_MS } from './rete.js';
+import { creaBanner } from './banner.js';
 import AIRPORTS from './data/airports.json';
 
 var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
@@ -1466,40 +1467,20 @@ export function initApp() {
   }).chiediVoli;
 
   // ---------- Banner rosso ----------
-  var bannerStato = null;   // { key, whyKey, whyParams } oppure null
-  var failStreak = 0;
-  function disegnaBanner() {
-    if (!bannerStato) return;
-    var p = bannerStato.whyKey
-      ? { why: t(bannerStato.whyKey, bannerStato.whyParams) }
-      : null;
-    errBar.textContent = t(bannerStato.key, p);
-    errBar.style.display = 'block';
-  }
-  function mostraBanner(key, whyKey, whyParams) {
-    bannerStato = { key: key, whyKey: whyKey || null, whyParams: whyParams || null };
-    disegnaBanner();
-  }
-  // Un buco isolato (galleria, cambio cella) non merita un allarme: il banner
-  // compare dal secondo fallimento di fila. Se pero e il server a dire
-  // esplicitamente cosa non va, non ha senso attendere una conferma.
+  // Il come sta in src/banner.js. Il ritmo del polling non lo riguarda: il
+  // backoff resta qui, ai punti di chiamata.
+  var banner = creaBanner({ elemento: errBar, t: t, diag: diag });
+  function mostraBanner(key, whyKey, whyParams) { banner.mostra(key, whyKey, whyParams); }
   function segnalaErroreVoli(err) {
-    failStreak++;
     backoffLevel++;  // rallenta: al prossimo giro aspettiamo di piu
-    diag(null, t(err.whyKey, err.whyParams));
-    if (err.sospeso) { mostraBanner('hud.apiSuspended'); return; }
-    var esplicito = (err.whyKey === 'err.apiSaid' || err.whyKey === 'err.http');
-    bannerStato = { key: 'hud.signalLostWhy', whyKey: err.whyKey, whyParams: err.whyParams };
-    if (esplicito || failStreak >= 2) disegnaBanner();
+    banner.segnala(err);
   }
   function clearNetError() {
-    failStreak = 0;
     backoffLevel = -1;  // di nuovo tutto bene: si torna al ritmo normale
-    bannerStato = null;
-    errBar.style.display = 'none';
+    banner.pulisci();
   }
   // Ridisegna il banner nella lingua giusta se la si cambia mentre e visibile
-  function refreshErrBar() { disegnaBanner(); }
+  function refreshErrBar() { banner.ridisegna(); }
 
   async function fetchPlanes() {
     var seq = ++fetchSeq;
