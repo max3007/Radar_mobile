@@ -55,6 +55,18 @@ export const FIRE_WMS = {
   burnt: { layers: 'effis.nrt.ba.poly', days: 30 }
 };
 
+// Finestra temporale nel formato che il WMS si aspetta ("inizio/fine").
+// Sta qui, accanto alla definizione che serve, perche' senza il parametro
+// `time` EFFIS restituisce l'intero archivio storico e la mappa diventa una
+// macchia continua. La usano l'overlay e la verifica Canadair-vicino-incendio.
+// @param {number} giorni  quanti giorni indietro guardare
+// @param {number} ora     istante di riferimento in ms; default adesso
+export function wmsTimeRange(giorni, ora) {
+  var fine = ora != null ? ora : Date.now();
+  var iso = function (d) { return new Date(d).toISOString().slice(0, 10); };
+  return iso(fine - giorni * 86400000) + '/' + iso(fine);
+}
+
 // INTERRUTTORE GENERALE delle chiamate ai dati di volo: a false l'app non
 // contatta nessuna fonte e lo dice apertamente, invece di sembrare rotta.
 // Serve se anche la fonte attiva dovesse chiudere l'accesso.

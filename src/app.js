@@ -5,7 +5,7 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
-import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN, FIRE_WMS, PLANES_API_ENABLED, PLANES_SOURCES, PLANES_SOURCE } from './config.js';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN, FIRE_WMS, wmsTimeRange, PLANES_API_ENABLED, PLANES_SOURCES, PLANES_SOURCE } from './config.js';
 
 // Fonte dei dati di volo in uso (vedi PLANES_SOURCES in config.js)
 var SRC = PLANES_SOURCES[PLANES_SOURCE];
@@ -22,6 +22,7 @@ import {
   iconaAereo, iconaOsservatore, iconaAeroporto, iconaPuntoPassaggio, iconaEtichetta
 } from './icone.js';
 import { creaMira } from './mira.js';
+import { creaOverlayIncendi } from './overlays.js';
 import AIRPORTS from './data/airports.json';
 
 var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
@@ -167,62 +168,17 @@ export function initApp() {
     });
   }
 
-  // Overlay incendi (rilevamenti satellitari EFFIS/Copernicus, WMS pubblico):
-  // due layer indipendenti, entrambi opzionali.
-  // - fireLayer: rilevamenti attivi (hotspot, tutte le fonti)
-  // - burntLayer: perimetri delle aree gia bruciate (quasi tempo reale)
-  function fmtWmsDate(d) { return d.toISOString().slice(0, 10); }
-  function wmsTimeRange(days) {
-    var end = new Date();
-    var start = new Date(Date.now() - days * 86400000);
-    return fmtWmsDate(start) + '/' + fmtWmsDate(end);
-  }
-  var fireLayer = null;
-  function setFires(on, save) {
-    showFires = on;
-    if (on) {
-      if (!fireLayer) {
-        fireLayer = L.tileLayer.wms(FIRE_WMS.url, {
-          layers: FIRE_WMS.hotspots.layers, format: 'image/png', transparent: true,
-          attribution: FIRE_WMS.attribution, time: wmsTimeRange(FIRE_WMS.hotspots.days),
-          opacity: 0.85, zIndex: 250
-        });
-      }
-      fireLayer.addTo(map);
-    } else if (fireLayer) {
-      map.removeLayer(fireLayer);
+  // Overlay incendi EFFIS/Copernicus: il come sta in src/overlays.js, qui
+  // resta solo il legame con le preferenze salvate.
+  var incendi = creaOverlayIncendi({
+    map: map,
+    onCambio: function (quale, acceso) {
+      if (quale === 'fires') showFires = acceso; else showBurnt = acceso;
+      savePrefs(buildPrefs());
     }
-    document.getElementById('chkFires').checked = on;
-    if (save) savePrefs(buildPrefs());
-  }
-  var burntLayer = null;
-  function setBurnt(on, save) {
-    showBurnt = on;
-    if (on) {
-      if (!burntLayer) {
-        burntLayer = L.tileLayer.wms(FIRE_WMS.url, {
-          layers: FIRE_WMS.burnt.layers, format: 'image/png', transparent: true,
-          attribution: FIRE_WMS.attribution, time: wmsTimeRange(FIRE_WMS.burnt.days),
-          opacity: 0.6, zIndex: 240
-        });
-      }
-      burntLayer.addTo(map);
-    } else if (burntLayer) {
-      map.removeLayer(burntLayer);
-    }
-    document.getElementById('chkBurnt').checked = on;
-    // La legenda dei colori EFFIS (eta dell'incendio) serve solo a layer acceso
-    document.getElementById('burntLegend').style.display = on ? 'flex' : 'none';
-    if (save) savePrefs(buildPrefs());
-  }
-  document.getElementById('chkFires').addEventListener('change', function () {
-    setFires(this.checked, true);
   });
-  document.getElementById('chkBurnt').addEventListener('change', function () {
-    setBurnt(this.checked, true);
-  });
-  setFires(showFires, false);
-  setBurnt(showBurnt, false);
+  incendi.setFires(showFires, false);
+  incendi.setBurnt(showBurnt, false);
 
   var markers = {};      // hex -> marker
   var markerState = {};  // hex -> { track, color, sel } per evitare setIcon inutili
