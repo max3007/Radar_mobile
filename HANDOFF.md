@@ -22,8 +22,8 @@ framework — scelta deliberata: il cuore è codice imperativo Leaflet).
 ```bash
 npm install
 npm run dev        # sviluppo (http://localhost:5173)
-npm test           # unit test dei moduli (147)
-npm run test:e2e   # prove interfaccia su browser vero (25)
+npm test           # unit test dei moduli (179)
+npm run test:e2e   # prove interfaccia su browser vero (26)
 npm run test:all   # entrambi
 npm run build      # produzione in dist/
 npm run preview    # anteprima build (http://localhost:4173)
@@ -34,45 +34,92 @@ Nota: GPS, bussola e notifiche richiedono HTTPS → si provano solo su
 
 ## Struttura
 
+Cinque strati, dipendenze in una direzione sola: dal basso verso l'alto
+nessuno sa dell'altro. La cartella dice a che strato appartiene un file, e
+lo strato dice cosa gli e permesso importare.
+
 ```
 index.html          markup; stringhe statiche marcate con data-i18n / data-i18n-ph
-src/main.js         entry: importa stili, avvia initApp
-src/app.js          il resto della logica applicativa: una grande initApp con
-                    chiusure condivise (mappa, marker/scie, pannelli, polling,
-                    postazioni, IN ARRIVO, follow/avvisi, tasto back). Quello
-                    che si e potuto staccare sta nei moduli qui sotto.
-src/domain.js       funzioni PURE e testate: airlineName, toCallsign, fmtFlight,
-                    compass, bearing*, elevationAngle, destPoint, altColor,
-                    planeColor, altLabel, isOnGround, emergencyInfo,
-                    flightPhaseInfo (codice+testo) e flightPhase (solo testo),
-                    routeConsistent, nextPass (CPA), landingBeforePass,
-                    isFirefightingAircraft (Canadair/water bomber),
+src/main.js         entry: importa gli stili, avvia initApp
+src/config.js       costanti e fonti dati: centro, raggio, polling, stili mappa,
+                    soglie IN ARRIVO, FIRE_WMS + wmsTimeRange, PLANES_SOURCES
+
+── dominio/ ───────── PURO. Niente Leaflet, niente DOM, niente stato condiviso.
+   aereo.js         chi e: airlineName, toCallsign, fmtFlight, altLabel,
+                    planeColor, isOnGround, isFirefightingAircraft
+   geometria.js     dove sta: distanceM (= map.distance di Leaflet, 0 ppb),
+                    bearing*, elevationAngle, destPoint, compass
+   passaggi.js      dove passera: nextPass (CPA), landingBeforePass
+   volo.js          cosa fa: routeConsistent, emergencyInfo, flightPhaseInfo,
                     datiEtichetta (cosa scrivere sull'etichetta di un aereo)
-src/rete.js         coda del limite di richieste, scadenza, ErroreVoli,
-                    creaCanaleVoli().chiediVoli: l'UNICO modo di interrogare i
-                    dati di volo. fetch e stato connessione iniettabili.
-src/banner.js       il banner rosso: quando comparire, cosa dire, come
-                    ridisegnarsi al cambio lingua. Niente backoff (sta in app.js)
-src/mira.js         guidaMira() pura (isteresi a due soglie, clamp del mirino)
-                    + creaMira() che parla con i sensori e col DOM
-src/icone.js        i cinque marker Leaflet (aereo, osservatore, aeroporto,
-                    punto di passaggio, etichetta). SOLO disegno
-src/overlays.js     i due strati WMS incendi (hotspot + aree bruciate)
-src/i18n.js         dizionari it/en + t(key,params) + applyStaticI18n + compassDirs
-src/config.js       costanti: centro, raggio, polling, stili mappa, soglie IN
-                    ARRIVO, FIRE_WMS + wmsTimeRange (incendi),
-                    PLANES_SOURCES (fonti dati voli)
-src/prefs.js        load/save preferenze (localStorage 'radarPrefs')
+   flotta.js        l'insieme: trimToRadius
+   index.js         li riespone tutti insieme: si importa da qui
+
+── ui/ ───────────── RESA. Trasforma dati gia decisi in markup.
+   dom.js           esc() (l'UNICO escape) e delega() (l'UNICO modo di rendere
+                    cliccabile una lista)
+   icone.js         i cinque marker Leaflet. SOLO disegno, nessuna decisione
+   i18n.js          dizionari it/en + t(key,params) + applyStaticI18n
+   banner.js        il banner rosso: quando comparire, cosa dire, come
+                    ridisegnarsi al cambio lingua
+   overlays.js      i due strati WMS incendi (hotspot + aree bruciate)
+
+── servizi/ ──────── EFFETTI. Parlano con rete e archiviazione.
+   voli.js          coda, scadenza, ErroreVoli, creaCanaleVoli().chiediVoli:
+                    l'UNICO modo di interrogare i dati di volo. fetch e stato
+                    connessione iniettabili, quindi provabile senza browser
+   incendi.js       verifica Canadair vicino a un rilevamento (GetFeatureInfo)
+   preferenze.js    load/save (localStorage 'radarPrefs')
+
+── funzioni/ ─────── FUNZIONALITA VERTICALI. Ognuna e una fabbrica che
+                    dichiara cosa le serve e restituisce la sua superficie.
+   traffico.js      pannello TRAFFICO: lista aerei + classifica compagnie
+   inarrivo.js      IN ARRIVO: scansione a 250 NM, tabella, proiezioni
+   seguiti.js       aerei seguiti e avviso al sorvolo
+   mira.js          guidaMira() pura (isteresi) + creaMira() con i sensori
+
+── infra/ ────────── STRUMENTI senza dominio.
+   cache.js         cache a capienza limitata con sfratto del meno usato
+
+── app/ ──────────── COMPOSIZIONE. L'unico strato che sa di tutti gli altri.
+   contesto.js      forma dello stato condiviso, salvataggio/rilettura
+                    preferenze con validazione, e il contratto per le funzioni
+   avvio.js         initApp: mappa, marker/scie, selezione, scheda volo,
+                    pannelli, polling, postazioni, ricerca, tasto back
+
 vercel.json         inoltro /adsb/* -> opendata.adsb.fi (aggira il CORS)
 src/data/*.json     airlines (ICAO→nome), iata2icao, airports
 src/styles.css      tutti gli stili (tema "fosforo" HUD)
-tests/*.test.js     unit test dei moduli puri (domain, rete, banner, mira,
-                    etichetta, overlays, sources)
+tests/*.test.js     unit test dei moduli puri e dei servizi
 tests/e2e/          prove dell'interfaccia con Playwright (browser vero)
 playwright.config.js  configurazione delle prove e2e
 legacy/             prototipo originale a file singolo (baseline)
 scripts/make-icons.mjs  genera le icone PWA (uso una tantum)
 ```
+
+### La regola che decide dove va una funzione nuova
+
+**Si puo provare senza aprire un browser?** Se si, va in `dominio/`. Ma
+attenzione: un modulo che importa Leaflet non parte sotto Vitest (`window is
+not defined`), quindi una funzione pura non va messa accanto a codice che usa
+Leaflet. `datiEtichetta` sta in `dominio/volo.js` e non in `ui/icone.js`,
+`wmsTimeRange` in `config.js` e non in `ui/overlays.js`, per questo motivo e
+non per gusto.
+
+Se ha effetti (rete, archiviazione, sensori) va in `servizi/`, con le
+dipendenze iniettabili. Se e una funzionalita che l'utente riconosce come
+tale, va in `funzioni/` come fabbrica che riceve un contesto.
+
+### Aggiungere una funzionalita
+
+1. Un file in `funzioni/`, che esporta `creaXxx(ctx)` e dichiara in cima cosa
+   legge dal contesto.
+2. Legge lo stato, **non lo scrive**: scriverci spetta a `avvio.js`, che e
+   l'unico a sapere cosa va ridisegnato dopo.
+3. Comunica gli esiti con richiamate, non toccando altre funzionalita.
+4. Le sue decisioni pure vanno estratte come funzioni a parte e provate: v.
+   `guidaMira()` in `mira.js` come modello.
+
 
 ## Convenzioni di lavoro (IMPORTANTE)
 
@@ -89,10 +136,14 @@ scripts/make-icons.mjs  genera le icone PWA (uso una tantum)
   tradotto — l'icona di fase volo confrontava `indexOf('SALITA')` e in
   inglese non funzionava piu; usare un codice separato, vedi
   `flightPhaseInfo`. (2) Cio che l'app scrive da sola non lo ridisegna
-  `applyStaticI18n`: va aggiunto a `ridisegnaTestiDinamici()` in `app.js`,
-  altrimenti resta nella lingua vecchia.
-- **prefs**: nuove preferenze → aggiungere in `buildPrefs()` e nel blocco di
-  load in `initApp` (validando il tipo).
+  `applyStaticI18n`: va aggiunto a `ridisegnaTestiDinamici()` in
+  `app/avvio.js`, altrimenti resta nella lingua vecchia.
+- **prefs**: una preferenza nuova va aggiunta in TRE punti di
+  `app/contesto.js` — il default in `creaStato()`, la scrittura in
+  `preferenzeDa()`, la rilettura validata in `applicaPreferenze()`.
+  Dimenticarne uno la fa sparire in silenzio al riavvio: c'e un test in
+  `tests/contesto.test.js` che percorre il giro completo e fallisce se
+  succede.
 
 ## Come verifico le UI (pattern usato in tutta la sessione)
 
