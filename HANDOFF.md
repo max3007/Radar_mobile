@@ -22,7 +22,7 @@ framework — scelta deliberata: il cuore è codice imperativo Leaflet).
 ```bash
 npm install
 npm run dev        # sviluppo (http://localhost:5173)
-npm test           # unit test funzioni pure (90)
+npm test           # unit test dei moduli (147)
 npm run test:e2e   # prove interfaccia su browser vero (25)
 npm run test:all   # entrambi
 npm run build      # produzione in dist/
@@ -37,24 +37,37 @@ Nota: GPS, bussola e notifiche richiedono HTTPS → si provano solo su
 ```
 index.html          markup; stringhe statiche marcate con data-i18n / data-i18n-ph
 src/main.js         entry: importa stili, avvia initApp
-src/app.js          TUTTA la logica applicativa (una grande initApp con chiusure
-                    condivise: mappa, marker/scie, pannelli, polling, MIRA,
-                    postazioni, IN ARRIVO, incendi, follow/avvisi, tasto back)
+src/app.js          il resto della logica applicativa: una grande initApp con
+                    chiusure condivise (mappa, marker/scie, pannelli, polling,
+                    postazioni, IN ARRIVO, follow/avvisi, tasto back). Quello
+                    che si e potuto staccare sta nei moduli qui sotto.
 src/domain.js       funzioni PURE e testate: airlineName, toCallsign, fmtFlight,
                     compass, bearing*, elevationAngle, destPoint, altColor,
                     planeColor, altLabel, isOnGround, emergencyInfo,
                     flightPhaseInfo (codice+testo) e flightPhase (solo testo),
                     routeConsistent, nextPass (CPA), landingBeforePass,
-                    isFirefightingAircraft (Canadair/water bomber)
+                    isFirefightingAircraft (Canadair/water bomber),
+                    datiEtichetta (cosa scrivere sull'etichetta di un aereo)
+src/rete.js         coda del limite di richieste, scadenza, ErroreVoli,
+                    creaCanaleVoli().chiediVoli: l'UNICO modo di interrogare i
+                    dati di volo. fetch e stato connessione iniettabili.
+src/banner.js       il banner rosso: quando comparire, cosa dire, come
+                    ridisegnarsi al cambio lingua. Niente backoff (sta in app.js)
+src/mira.js         guidaMira() pura (isteresi a due soglie, clamp del mirino)
+                    + creaMira() che parla con i sensori e col DOM
+src/icone.js        i cinque marker Leaflet (aereo, osservatore, aeroporto,
+                    punto di passaggio, etichetta). SOLO disegno
+src/overlays.js     i due strati WMS incendi (hotspot + aree bruciate)
 src/i18n.js         dizionari it/en + t(key,params) + applyStaticI18n + compassDirs
 src/config.js       costanti: centro, raggio, polling, stili mappa, soglie IN
-                    ARRIVO, FIRE_WMS (incendi), PLANES_SOURCES (fonti dati voli)
+                    ARRIVO, FIRE_WMS + wmsTimeRange (incendi),
+                    PLANES_SOURCES (fonti dati voli)
 src/prefs.js        load/save preferenze (localStorage 'radarPrefs')
 vercel.json         inoltro /adsb/* -> opendata.adsb.fi (aggira il CORS)
 src/data/*.json     airlines (ICAO→nome), iata2icao, airports
 src/styles.css      tutti gli stili (tema "fosforo" HUD)
-tests/domain.test.js unit test delle funzioni pure
-tests/sources.test.js  fonti dati: URL, rilevamento errori, dati reali adsb.fi
+tests/*.test.js     unit test dei moduli puri (domain, rete, banner, mira,
+                    etichetta, overlays, sources)
 tests/e2e/          prove dell'interfaccia con Playwright (browser vero)
 playwright.config.js  configurazione delle prove e2e
 legacy/             prototipo originale a file singolo (baseline)
@@ -103,6 +116,12 @@ lingua con un errore visibile, pannelli e tasto BACK. Scrivere script
 usa-e-getta come si faceva prima significa buttare via la verifica appena
 fatta: meglio aggiungere un caso li.
 
+**Prima di un e2e, chiediti se basta un unit test.** Gira in un secondo
+invece che in un minuto e mezzo, e dice con precisione cosa e rotto. I test
+in `tests/*.test.js` usano il traduttore VERO di `src/i18n.js`, non un
+dizionario finto: cosi le frasi attese non possono divergere da quelle che
+l'utente legge davvero.
+
 ## Funzionalità implementate
 
 Modularizzazione Vite · PWA installabile · stili mappa (rilievo/satellite/
@@ -124,26 +143,37 @@ o descrizione) e li evidenzia con colore/icona dedicati; se rilevati vicino a
 un hotspot attivo (verifica via WMS GetFeatureInfo, best-effort) l'evidenza
 si rafforza (icona pulsante, badge "VICINO A UN INCENDIO" in lista e scheda).
 
-## Due registri da cui deriva il resto (esito del refactoring)
+## Un solo modo di fare ciascuna cosa (esito del refactoring)
 
-Erano i due punti dove la duplicazione causava bug veri, ora hanno un elenco
-unico da cui tutto si ricava:
+Dove la duplicazione ha causato bug veri, ora c'e un punto solo da cui tutto
+si ricava. Se ti trovi a scrivere la seconda copia di una di queste, fermati.
 
-- **`chiediVoli(url)`** e l'UNICO modo di interrogare i dati di volo. Applica
-  sempre, nello stesso ordine: interruttore generale, turno nella coda del
-  limite di richieste, scadenza, controllo dell'errore nel corpo della
-  risposta, diagnostica. Prima ogni chiamante ne applicava un sottoinsieme
-  diverso: per questo la ricerca volo diceva "non in volo" quando la fonte
-  aveva rifiutato. Non aggiungere `fetch` diretti verso i voli.
+- **`chiediVoli(url)`** (`src/rete.js`) e l'UNICO modo di interrogare i dati
+  di volo. Applica sempre, nello stesso ordine: interruttore generale, turno
+  nella coda del limite di richieste, scadenza, controllo dell'errore nel
+  corpo della risposta, diagnostica. Prima ogni chiamante ne applicava un
+  sottoinsieme diverso: per questo la ricerca volo diceva "non in volo"
+  quando la fonte aveva rifiutato. Non aggiungere `fetch` diretti verso i voli.
 - **`PANNELLI` + `SOVRAPPOSTE`** descrivono le finestre. `closeAll`,
   `isAnyOpen` e `closeTopmost` si ricavano da li; `togglePannello(id)` apre e
-  chiude. L'ordine di `SOVRAPPOSTE` E la priorita del tasto BACK. Aggiungere
-  una finestra costa una riga: prima l'elenco era ripetuto in tre posti e
-  dimenticarne uno rompeva il BACK in silenzio.
+  chiude, `chiudiPannello(id)` chiude e basta. L'ordine di `SOVRAPPOSTE` E la
+  priorita del tasto BACK. **Mai `classList.remove('open')` a mano**: e' cosi
+  che il BACK si rompe in silenzio, ed e' gia successo due volte.
+- **`vaiAllAereo(ac, opz)`** porta la vista su un aereo e lo seleziona. Erano
+  tre varianti (lista TRAFFICO, IN ARRIVO, ricerca volo) che facevano le
+  stesse cose in ordine diverso, ognuna dimenticandone una.
+- **`zoomPerRaggio(nm)`** e l'unico posto dove sta la scala raggio→zoom.
 
-Il banner di errore conserva **chiave e parametri**, non la frase tradotta:
-solo cosi si ridisegna nella lingua giusta. Se ci si mette il testo gia
-tradotto, al cambio lingua resta mezzo in italiano.
+Il banner di errore (`src/banner.js`) conserva **chiave e parametri**, non la
+frase tradotta: solo cosi si ridisegna nella lingua giusta. Se ci si mette il
+testo gia tradotto, al cambio lingua resta mezzo in italiano.
+
+**Dove mettere una funzione nuova.** Se e pura, va in un modulo, non in
+`app.js`: e l'unico modo di poterla provare senza aprire un browser. Ma
+attenzione — un modulo che importa Leaflet non parte sotto Vitest (`window is
+not defined`), quindi una funzione pura non va messa accanto a codice che usa
+Leaflet: `datiEtichetta` sta in `domain.js` e non in `icone.js`, `wmsTimeRange`
+in `config.js` e non in `overlays.js`, per questo motivo e non per gusto.
 
 ## FONTE DEI DATI DI VOLO — leggere prima di toccarla
 

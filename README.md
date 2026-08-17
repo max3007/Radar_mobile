@@ -69,7 +69,7 @@ satellite) e [CARTO](https://carto.com)/OSM (radar scuro).
 ```bash
 npm install
 npm run dev       # server di sviluppo (http://localhost:5173)
-npm test          # unit test delle funzioni pure (Vitest)
+npm test          # unit test dei moduli puri (Vitest)
 npm run test:e2e  # prove dell'interfaccia su browser vero (Playwright)
 npm run test:all  # entrambi
 npm run build     # build di produzione in dist/
@@ -85,10 +85,15 @@ oppure la preview di Vercel.
 ```
 index.html          markup dell'app (nessuno script inline)
 src/main.js         entry point: stili, avvio app
-src/app.js          logica applicativa: mappa, marker, pannelli, polling, MIRA,
+src/app.js          logica applicativa: mappa, marker, pannelli, polling,
                     postazioni, aeroporti, ricerca luoghi
 src/domain.js       funzioni pure (bearing, fase di volo, emergenze, callsign,
                     coerenza rotta…)
+src/rete.js         interrogazione dei dati di volo: coda, scadenza, errori
+src/banner.js       il banner rosso quando i dati non arrivano
+src/mira.js         il mirino a due assi verso l'aereo selezionato
+src/icone.js        i marker della mappa (aereo, osservatore, aeroporto…)
+src/overlays.js     gli strati WMS degli incendi
 src/config.js       costanti: centro default, raggio, polling, URL API, stili mappa
 src/prefs.js        preferenze persistenti (localStorage)
 src/data/*.json     compagnie ICAO, prefissi IATA→ICAO, aeroporti
@@ -96,7 +101,8 @@ src/styles.css      stili (tema "fosforo" HUD)
 public/             icone PWA (generate da scripts/make-icons.mjs)
 scripts/            generazione icone (uso una tantum)
 vite.config.js      build Vite + vite-plugin-pwa (manifest, service worker)
-tests/              unit test Vitest su src/domain.js
+tests/*.test.js     unit test Vitest sui moduli puri
+tests/e2e/          prove dell'interfaccia su browser vero (Playwright)
 legacy/             prototipo originale a file singolo (baseline di confronto)
 ```
 
