@@ -3,12 +3,27 @@
 //
 // Il modulo e' diviso in due meta' apposta:
 //
-// - guidaMira() decide. E' pura: date le due differenze angolari dice dove
-//   va il mirino e cosa dire all'utente. Contiene l'isteresi anti-tremolio,
-//   che e' il pezzo di logica piu' facile da rompere per sbaglio e finora
-//   viveva sepolto dentro un gestore di eventi dei sensori, dove nessun test
-//   poteva arrivare.
+// - le funzioni pure decidono: dove punta il telefono (direzionePuntata) e
+//   dove va disegnato il bersaglio (guidaMira). Si provano senza browser.
 // - creaMira() esegue. Parla con i sensori e scrive nel DOM.
+//
+// ---------------------------------------------------------------------------
+// PERCHE IL CALCOLO PASSA DA UNA MATRICE DI ROTAZIONE
+//
+// La versione precedente prendeva `alpha` come azimut e `beta` come alzata.
+// E' una scorciatoia che vale SOLO col telefono tenuto perfettamente
+// verticale e senza rollio laterale — cioe' quasi mai. Nell'uso vero MIRA si
+// tiene alzata verso il cielo, che e' esattamente dove gli angoli di Eulero
+// degenerano: a beta = 90° si perde un grado di liberta' (gimbal lock) e
+// basta un filo di inclinazione laterale perche' alpha salti di decine di
+// gradi. Risultato: il bersaglio sbatteva da un lato all'altro del cerchio e
+// centrarlo era impossibile.
+//
+// La strada corretta e' ricostruire la matrice di rotazione dai tre angoli,
+// applicarla al versore che esce dal retro del telefono e leggere azimut ed
+// elevazione da quel vettore. E' stabile in ogni assetto, tiene conto del
+// rollio, e non ha punti degeneri.
+// ---------------------------------------------------------------------------
 
 import { t } from '../ui/i18n.js';
 import { bearingFromCenter, elevationAngle } from '../dominio/index.js';
@@ -28,6 +43,47 @@ export var RAGGIO_MAX = 47;
 // Costante che ancora la curva: a LOCK_IN gradi l'aereo cade esattamente sul
 // bordo del cerchio. Ricavata da RAGGIO_MAX * L / (L + S) = RAGGIO_CERCHIO.
 var S_CURVA = LOCK_IN * (RAGGIO_MAX / RAGGIO_CERCHIO - 1);
+
+var RAD = Math.PI / 180;
+var GRADI = 180 / Math.PI;
+
+/**
+ * Il versore verso cui punta il RETRO del telefono, in coordinate mondo.
+ *
+ * Convenzione W3C: gli assi mondo sono X = Est, Y = Nord, Z = Su, e la
+ * rotazione del dispositivo e' la sequenza intrinseca Z-X'-Y'' cioe'
+ * Rz(alpha)·Rx(beta)·Ry(gamma). Il retro del telefono — dove sta la
+ * fotocamera, la direzione in cui lo si "punta" — e' l'asse -Z del
+ * dispositivo, quindi basta prendere la terza colonna della matrice e
+ * cambiarle segno.
+ *
+ * @returns {number[]} [est, nord, su], di modulo 1
+ */
+export function vettorePuntamento(alpha, beta, gamma) {
+  var ca = Math.cos(alpha * RAD), sa = Math.sin(alpha * RAD);
+  var cb = Math.cos(beta * RAD),  sb = Math.sin(beta * RAD);
+  var cg = Math.cos(gamma * RAD), sg = Math.sin(gamma * RAD);
+  // Terza colonna di Rz(a)·Rx(b)·Ry(g), col segno gia' invertito
+  return [
+    -(ca * sg + sa * sb * cg),
+    -(sa * sg - ca * sb * cg),
+    -(cb * cg)
+  ];
+}
+
+/** Azimut (0 = Nord, orario) ed elevazione (gradi sopra l'orizzonte). */
+export function direzioneDaVettore(v) {
+  var n = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) || 1;
+  return {
+    azimut: (Math.atan2(v[0] / n, v[1] / n) * GRADI + 360) % 360,
+    elevazione: Math.asin(Math.max(-1, Math.min(1, v[2] / n))) * GRADI
+  };
+}
+
+/** Dove sta guardando il telefono, dati i tre angoli dei sensori. */
+export function direzionePuntata(alpha, beta, gamma) {
+  return direzioneDaVettore(vettorePuntamento(alpha, beta, gamma));
+}
 
 /**
  * Dove disegnare l'aereo bersaglio e come orientarlo.
@@ -105,13 +161,32 @@ export function guidaMira(diffAz, diffEl, hasPitch, eraAgganciato) {
 export function creaMira(cfg) {
   var attiva = false;
   var handler = null;
-  // Componenti circolari per l'azimut (regge il salto 359->0) + EMA sul pitch
-  var smoothSin = null, smoothCos = null, smoothBeta = null;
-  // Riferimento di pitch che corrisponde all'orizzonte (0° di elevazione).
-  // Default 90°: telefono tenuto verticale. La calibrazione lo azzera sul reale.
-  var betaHorizon = 90;
-  var lastBeta = null;    // ultimo pitch grezzo, per il pulsante CALIBRA
+  // Media mobile sul VETTORE di puntamento, non sugli angoli. Il vettore e'
+  // continuo: non ha il salto 359->0 dell'azimut, e non ha il caso degenere
+  // della media circolare fra due direzioni opposte.
+  var vSmussato = null;
+  // Correzione dell'elevazione impostata dal pulsante di calibrazione.
+  var offsetElev = 0;
+  var ultimaElev = null;  // ultima elevazione grezza, per il pulsante
   var agganciato = false;
+  // UNA sola sorgente di orientamento. Su Android arrivano DUE flussi:
+  // 'deviceorientationabsolute' ha alpha riferito al Nord vero, mentre
+  // 'deviceorientation' puo' averlo riferito a dov'era il telefono all'avvio.
+  // Ascoltandoli entrambi con lo stesso gestore, l'azimut saltava fra due
+  // riferimenti diversi a ogni evento (60 volte al secondo) e il bersaglio
+  // rimbalzava da un lato all'altro del cerchio: era impossibile centrarlo.
+  var sorgente = null;
+
+  /** true se questo evento viene dal flusso che abbiamo scelto di ascoltare. */
+  function sorgenteBuona(ev) {
+    var assoluto = (ev.type === 'deviceorientationabsolute') ||
+                   ev.absolute === true ||
+                   typeof ev.webkitCompassHeading === 'number';
+    if (sorgente === null) { sorgente = { tipo: ev.type, assoluto: assoluto }; return true; }
+    // Un flusso assoluto ha sempre la precedenza su uno relativo
+    if (assoluto && !sorgente.assoluto) { sorgente = { tipo: ev.type, assoluto: assoluto }; return true; }
+    return ev.type === sorgente.tipo;
+  }
 
   function el(id) { return document.getElementById(id); }
 
@@ -133,34 +208,37 @@ export function creaMira(cfg) {
   }
 
   function onOrientation(ev) {
-    // --- Asse orizzontale: rotazione (bussola) ---
-    var heading = null;
-    if (typeof ev.webkitCompassHeading === 'number') heading = ev.webkitCompassHeading;
-    else if (ev.alpha != null) heading = 360 - ev.alpha; // Android: alpha antiorario da Nord
-    if (heading == null) return;
-    var rad = heading * Math.PI / 180;
-    if (smoothSin == null) { smoothSin = Math.sin(rad); smoothCos = Math.cos(rad); }
-    else {
-      smoothSin = smoothSin * (1 - SMOOTH) + Math.sin(rad) * SMOOTH;
-      smoothCos = smoothCos * (1 - SMOOTH) + Math.cos(rad) * SMOOTH;
+    if (!sorgenteBuona(ev)) return;
+    if (ev.alpha == null) return;
+
+    // iOS espone l'heading vero della bussola a parte, e lascia alpha
+    // relativo: si sostituisce, cosi la matrice lavora sempre sul Nord vero.
+    var alpha = (typeof ev.webkitCompassHeading === 'number')
+      ? 360 - ev.webkitCompassHeading
+      : ev.alpha;
+    // Senza inclinazione nota si assume il telefono verticale, che e' come
+    // lo si tiene per guardare il cielo.
+    var hasPitch = (ev.beta != null);
+    var beta = hasPitch ? ev.beta : 90;
+    var gamma = (ev.gamma != null) ? ev.gamma : 0;
+
+    var v = vettorePuntamento(alpha, beta, gamma);
+    if (vSmussato == null) vSmussato = v.slice();
+    else for (var i = 0; i < 3; i++) {
+      vSmussato[i] = vSmussato[i] * (1 - SMOOTH) + v[i] * SMOOTH;
     }
-    var smussato = (Math.atan2(smoothSin, smoothCos) * 180 / Math.PI + 360) % 360;
+    var punta = direzioneDaVettore(vSmussato);
+    ultimaElev = punta.elevazione;
 
     var brg = bearingBersaglio();
     if (brg == null) return;
-    var diffAz = ((brg - smussato + 540) % 360) - 180; // -180..180
+    var diffAz = ((brg - punta.azimut + 540) % 360) - 180; // -180..180
 
-    // --- Asse verticale: alzata (inclinazione del telefono) ---
-    var hasPitch = (ev.beta != null);
     var diffEl = null;
     if (hasPitch) {
-      lastBeta = ev.beta;
-      if (smoothBeta == null) smoothBeta = ev.beta;
-      else smoothBeta = smoothBeta * (1 - SMOOTH) + ev.beta * SMOOTH;
-      // Elevazione a cui punta il telefono: verticale (betaHorizon) = orizzonte
-      var elevPuntata = betaHorizon - smoothBeta;
       var tgt = elevazioneBersaglio();
-      if (tgt != null) diffEl = tgt - elevPuntata; // >0 = aereo piu in alto -> alza
+      // >0 = aereo piu in alto del punto mirato -> alza il telefono
+      if (tgt != null) diffEl = tgt - (punta.elevazione - offsetElev);
       else hasPitch = false;
     }
 
@@ -180,8 +258,8 @@ export function creaMira(cfg) {
 
   function start() {
     if (!cfg.getAereo()) return;
-    // Reset del filtro: riparte pulito
-    smoothSin = null; smoothCos = null; smoothBeta = null; agganciato = false;
+    // Reset del filtro e della scelta di sorgente: riparte pulito
+    vSmussato = null; sorgente = null; agganciato = false;
     var hint = el('miraHint');
     hint.textContent = '';
     el('miraOverlay').style.display = 'block';
@@ -224,13 +302,16 @@ export function creaMira(cfg) {
   }
 
   // Calibrazione orizzonte: l'inclinazione attuale del telefono diventa lo 0°
-  // di elevazione. Da usare tenendo il telefono verticale puntato all'orizzonte.
+  // di elevazione. Da usare puntando il telefono all'orizzonte.
   function calibra() {
-    if (lastBeta == null) {
+    if (ultimaElev == null) {
       el('miraHint').textContent = t('mira.moveFirst');
       return;
     }
-    betaHorizon = lastBeta;
+    // L'elevazione calcolata adesso diventa lo zero. Con la matrice il calcolo
+    // e' gia geometricamente corretto: questo serve solo a compensare come
+    // ciascuno tiene il telefono rispetto alla propria linea di vista.
+    offsetElev = ultimaElev;
     el('miraHint').textContent = t('mira.calibrated');
   }
 

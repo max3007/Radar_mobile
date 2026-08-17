@@ -1,5 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { preparaRete } from './fixtures.js';
+import { preparaRete, rispostaOk, ANZIO } from './fixtures.js';
+
+// Un aereo VICINO e ALTO, quindi con elevazione grande: a 1-2 gradi
+// sull'orizzonte un errore di segno sull'asse verticale non si distingue dal
+// rumore, e un test che lo usasse passerebbe anche col difetto presente.
+// Questo sta a ~3,3 km e 10000 ft: 43 gradi sopra l'orizzonte.
+const AEREO_ALTO = {
+  hex: '4cad5c', flight: 'ITY088  ', r: 'EI-HHT', t: 'BCS1',
+  desc: 'AIRBUS A220-100', alt_baro: 10000, gs: 270, track: 45,
+  baro_rate: 0, lat: 41.4779, lon: 12.6285, dst: 2
+};
 
 // MIRA non aveva nessuna prova end-to-end: la decisione (guidaMira) era coperta
 // da test unitari, ma che i sensori arrivassero fino allo schermo si poteva
@@ -26,14 +36,41 @@ async function apriMira(page) {
  * @param alpha  bussola: l'app calcola heading = 360 - alpha
  * @param beta   inclinazione: 90 = telefono verticale, puntato all'orizzonte
  */
-async function orienta(page, alpha, beta) {
-  await page.evaluate(([a, b]) => {
-    for (let i = 0; i < 40; i++) {
-      window.dispatchEvent(new DeviceOrientationEvent('deviceorientation',
-        { alpha: a, beta: b, gamma: 0 }));
+async function orienta(page, alpha, beta, gamma = 0, tipo = 'deviceorientationabsolute') {
+  await page.evaluate(([a, b, g, t]) => {
+    for (let i = 0; i < 60; i++) {
+      const ev = new DeviceOrientationEvent(t, { alpha: a, beta: b, gamma: g });
+      Object.defineProperty(ev, 'absolute', { value: t === 'deviceorientationabsolute' });
+      window.dispatchEvent(ev);
     }
-  }, [alpha, beta]);
+  }, [alpha, beta, gamma, tipo]);
   await page.waitForTimeout(150);
+}
+
+/** Assetto (alpha, beta) che punta a un dato azimut/elevazione, con gamma 0. */
+function assettoVerso(azimut, elevazione) {
+  return [(360 - azimut) % 360, 90 + elevazione];
+}
+
+/** Azimut ed elevazione di un aereo visto da un punto di osservazione. */
+function bersaglio(centro, ac) {
+  const R = Math.PI / 180, R_T = 6371000;
+  const lat1 = centro.lat * R, lat2 = ac.lat * R, dLon = (ac.lon - centro.lon) * R;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const d = 2 * R_T * Math.asin(Math.sqrt(
+    Math.sin((lat2 - lat1) / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2));
+  return {
+    azimut: (Math.atan2(y, x) / R + 360) % 360,
+    elevazione: Math.atan2(ac.alt_baro * 0.3048, d) / R
+  };
+}
+
+/** Lo scarto in gradi mostrato dentro al cerchio. */
+async function gradiMancanti(page) {
+  const t = await page.locator('#miraGradi').textContent();
+  return t === '--' ? null : parseInt(t, 10);
 }
 
 /** Gradi di rotazione del muso dell'aereo, normalizzati a -180..180. */
@@ -167,6 +204,81 @@ test.describe('MIRA: cerchio fermo e aereo da centrarci dentro', () => {
     await orienta(page, 45, 90);
 
     await expect(page.locator('#miraGradi')).toHaveText(/^\d+°$/);
+  });
+
+  test('puntando il telefono verso l aereo, il bersaglio entra nel cerchio', async ({ page }) => {
+    // LA prova che protegge il difetto segnalato: "l'aereo non riesce mai a
+    // entrare nel cerchio, passa da un lato all'altro". Prima falliva perche
+    // l'azimut veniva da alpha grezzo e saltava; adesso viene dal versore di
+    // puntamento ricostruito con la matrice di rotazione.
+    await preparaRete(page, () => rispostaOk([AEREO_ALTO]));
+    await page.goto('/');
+    await page.waitForTimeout(1400);
+    await apriMira(page);
+
+    const b = bersaglio(ANZIO, AEREO_ALTO);
+    expect(b.elevazione).toBeGreaterThan(35);   // il test discrimina solo se e alto
+
+    // Prima si guarda dalla parte opposta: deve dire che manca molto
+    await orienta(page, ...assettoVerso((b.azimut + 180) % 360, 0));
+    expect(await gradiMancanti(page)).toBeGreaterThan(90);
+    await expect(page.locator('#miraBox')).not.toHaveClass(/agganciato/);
+
+    // Poi si punta il telefono verso l'aereo: deve agganciare
+    await orienta(page, ...assettoVerso(b.azimut, b.elevazione));
+    expect(await gradiMancanti(page)).toBeLessThan(10);
+    await expect(page.locator('#miraBox')).toHaveClass(/agganciato/);
+  });
+
+  test('alzare il telefono avvicina il bersaglio, non lo allontana', async ({ page }) => {
+    // Il segno dell'asse verticale. Con l'elevazione invertita si insegue il
+    // bersaglio nella direzione sbagliata e lo si supera di continuo: e meta
+    // del "passa da un lato all'altro" segnalato.
+    await preparaRete(page, () => rispostaOk([AEREO_ALTO]));
+    await page.goto('/');
+    await page.waitForTimeout(1400);
+    await apriMira(page);
+
+    const b = bersaglio(ANZIO, AEREO_ALTO);
+    // Puntato all'orizzonte nella direzione giusta: manca solo l'alzata
+    await orienta(page, ...assettoVerso(b.azimut, 0));
+    const conTelefonoBasso = await gradiMancanti(page);
+
+    // Alzandolo verso l'aereo lo scarto deve CALARE
+    await orienta(page, ...assettoVerso(b.azimut, b.elevazione));
+    const conTelefonoAlzato = await gradiMancanti(page);
+
+    expect(conTelefonoAlzato).toBeLessThan(conTelefonoBasso);
+    expect(conTelefonoAlzato).toBeLessThan(10);
+  });
+
+  test('due flussi di sensori insieme non fanno rimbalzare il bersaglio', async ({ page }) => {
+    // Su Android arrivano DUE eventi: 'deviceorientationabsolute' con alpha
+    // riferito al Nord vero, e 'deviceorientation' che puo averlo riferito a
+    // dov'era il telefono all'avvio. Ascoltandoli entrambi, l'azimut saltava
+    // fra due riferimenti 60 volte al secondo. E il difetto segnalato.
+    await preparaRete(page);
+    await page.goto('/');
+    await page.waitForTimeout(1200);
+    await apriMira(page);
+
+    // Il telefono resta FERMO su un assetto per tutta la prova. L'unica cosa
+    // che cambia e quale flusso sta parlando in quel momento.
+    await orienta(page, 0, 120, 0, 'deviceorientationabsolute');
+
+    // Si campiona DURANTE l'alternanza, non solo alla fine: col difetto
+    // presente lo stato finale torna a posto ma nel mezzo il bersaglio
+    // rimbalza, ed e proprio il rimbalzo che rende impossibile centrarlo.
+    const letture = [];
+    for (let i = 0; i < 4; i++) {
+      await orienta(page, 140, 120, 0, 'deviceorientation');
+      letture.push(await gradiMancanti(page));
+      await orienta(page, 0, 120, 0, 'deviceorientationabsolute');
+      letture.push(await gradiMancanti(page));
+    }
+
+    const min = Math.min(...letture), max = Math.max(...letture);
+    expect(max - min).toBeLessThan(8);
   });
 
   test('il tasto BACK chiude MIRA senza uscire dall app', async ({ page }) => {

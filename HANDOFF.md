@@ -22,8 +22,8 @@ framework — scelta deliberata: il cuore è codice imperativo Leaflet).
 ```bash
 npm install
 npm run dev        # sviluppo (http://localhost:5173)
-npm test           # unit test dei moduli (186)
-npm run test:e2e   # prove interfaccia su browser vero (32)
+npm test           # unit test dei moduli (193)
+npm run test:e2e   # prove interfaccia su browser vero (37)
 npm run test:all   # entrambi
 npm run build      # produzione in dist/
 npm run preview    # anteprima build (http://localhost:4173)
@@ -76,8 +76,9 @@ src/config.js       costanti e fonti dati: centro, raggio, polling, stili mappa,
    traffico.js      pannello TRAFFICO: lista aerei + classifica compagnie
    inarrivo.js      IN ARRIVO: scansione a 250 NM, tabella, proiezioni
    seguiti.js       aerei seguiti e avviso al sorvolo
-   mira.js          guidaMira() pura (isteresi, angolo della freccia, gradi
-                    mancanti) + creaMira() che parla con i sensori
+   mira.js          direzionePuntata() pura (matrice di rotazione: dove
+                    guarda il telefono) + guidaMira() pura (dove disegnare il
+                    bersaglio) + creaMira() che parla con i sensori
 
 ── infra/ ────────── STRUMENTI senza dominio.
    cache.js         cache a capienza limitata con sfratto del meno usato
@@ -145,6 +146,26 @@ tale, va in `funzioni/` come fabbrica che riceve un contesto.
   Dimenticarne uno la fa sparire in silenzio al riavvio: c'e un test in
   `tests/contesto.test.js` che percorre il giro completo e fallisce se
   succede.
+
+### Sensori di orientamento: tre trappole gia costate un difetto
+
+1. **Un flusso solo.** Su Android arrivano SIA `deviceorientationabsolute`
+   (alpha riferito al Nord vero) SIA `deviceorientation` (alpha riferito a
+   dov'era il telefono all'avvio). Ascoltandoli entrambi col medesimo gestore
+   l'azimut salta fra due riferimenti 60 volte al secondo.
+2. **Mai usare alpha come azimut e beta come alzata.** Vale solo col telefono
+   verticale e senza rollio. Alzandolo verso il cielo si finisce nel punto
+   degenere degli angoli di Eulero (beta 90°). Si passa dalla matrice di
+   rotazione: `direzionePuntata()` in `funzioni/mira.js`.
+3. **Il segno dell'alzata.** Con beta > 90 il retro del telefono punta piu in
+   ALTO. La formula `90 - beta` dava il verso opposto: alzando il telefono il
+   bersaglio scendeva.
+
+**Un test che passa anche col difetto reintrodotto non serve a niente.** Per
+i tre difetti qui sopra c'e una prova ciascuno in `tests/e2e/mira.spec.js`, e
+sono state validate rimettendo il difetto e verificando che diventino rosse.
+Attenzione al bersaglio di prova: con un aereo a 2 gradi sull'orizzonte
+l'inversione di segno non si distingue dal rumore e il test passa comunque.
 
 ## Come verifico le UI (pattern usato in tutta la sessione)
 
