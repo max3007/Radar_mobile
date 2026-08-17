@@ -24,6 +24,7 @@ import {
 import { creaMira } from './mira.js';
 import { creaOverlayIncendi } from './overlays.js';
 import { esc, delega } from './dom.js';
+import { creaCache } from './cache.js';
 import AIRPORTS from './data/airports.json';
 
 var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
@@ -186,7 +187,8 @@ export function initApp() {
   var trails = {};       // hex -> { pts, line, color }
   var selected = null;
   var lastAircraft = [];
-  var photoCache = {};
+  // Cache a capienza limitata: v. src/cache.js per il perche.
+  var photoCache = creaCache(200);   // hex -> {url, credit} | null
   var rings = [];
   var fetchSeq = 0;      // scarta risposte fuori ordine
   var timer = null;
@@ -200,7 +202,7 @@ export function initApp() {
   }
   function tagIcon(ac) {
     var cs = (ac.flight || '').trim();
-    return iconaEtichetta(datiEtichetta(ac, cs ? routeCache[cs] : null));
+    return iconaEtichetta(datiEtichetta(ac, cs ? routeCache.get(cs) : null));
   }
   function updateTag(ac) {
     if (!ac || ac.lat == null) return;
@@ -355,8 +357,9 @@ export function initApp() {
     var note = document.getElementById('photoNote');
     wrap.style.display = 'none';
     note.textContent = '';
-    if (photoCache[hex] === null) { note.textContent = t('photo.none'); return; }
-    if (photoCache[hex]) { showPhoto(photoCache[hex]); return; }
+    var giaVista = photoCache.get(hex);
+    if (giaVista === null) { note.textContent = t('photo.none'); return; }
+    if (giaVista) { showPhoto(giaVista); return; }
     note.textContent = t('photo.searching');
     try {
       var info = await fetchPhotoFrom(API.photoHex + hex.toUpperCase());
@@ -364,11 +367,11 @@ export function initApp() {
         info = await fetchPhotoFrom(API.photoReg + encodeURIComponent(reg));
       }
       if (info && info.url) {
-        photoCache[hex] = info;
+        photoCache.set(hex, info);
         note.textContent = '';
         showPhoto(info);
       } else {
-        photoCache[hex] = null;
+        photoCache.set(hex, null);
         note.textContent = t('photo.none');
       }
     } catch (e) {
@@ -383,7 +386,7 @@ export function initApp() {
   }
 
   // ---------- Rotta del volo (adsbdb.com, gratuita senza chiave) ----------
-  var routeCache = {};   // callsign -> {orig, dest} | null (null = non trovata)
+  var routeCache = creaCache(300);  // callsign -> {orig, dest} | null (null = cercata, non trovata)
   var routeLine = null;  // polilinea origine -> aereo -> destinazione
   var currentRoute = null;
 
@@ -448,7 +451,7 @@ export function initApp() {
       showRoute(null, ac);
       return;
     }
-    if (cs in routeCache) { showRoute(routeCache[cs], ac); return; }
+    if (routeCache.has(cs)) { showRoute(routeCache.get(cs), ac); return; }
     note.textContent = t('route.searching');
     try {
       var res = await fetchConScadenza(API.routeCallsign + encodeURIComponent(cs));
@@ -463,11 +466,11 @@ export function initApp() {
           dest: { iata: fr.destination.iata_code, icao: fr.destination.icao_code, city: fr.destination.municipality,
                   name: fr.destination.name, lat: fr.destination.latitude, lon: fr.destination.longitude }
         };
-        routeCache[cs] = r;
+        routeCache.set(cs, r);
         // Mostra solo se l'aereo e ancora selezionato
         if (selected === ac.hex) showRoute(r, ac);
       } else {
-        routeCache[cs] = null;
+        routeCache.set(cs, null);
         if (selected === ac.hex) showRoute(null, ac);
       }
     } catch (e) {
@@ -664,8 +667,8 @@ export function initApp() {
     updateFollowBtn(); // stato campanella per l'aereo appena selezionato
     // Carica la rotta subito (serve all'etichetta per partenza->destinazione)
     var cs = (ac.flight || '').trim();
-    if (cs && !(cs in routeCache)) loadRoute(ac);
-    else if (cs && routeCache[cs]) showRoute(routeCache[cs], ac);
+    if (cs && !routeCache.has(cs)) loadRoute(ac);
+    else if (cs && routeCache.get(cs)) showRoute(routeCache.get(cs), ac);
     if (cambiatoAereo) updateSelectedIcons(prev, selected);
     drawPlanes(lastAircraft); // riapplica attenuazione agli altri
   }
@@ -679,7 +682,7 @@ export function initApp() {
     loadPhoto(ac.hex, ac.r);
     // Rotta: usa cache se presente, altrimenti caricala
     var cs = (ac.flight || '').trim();
-    if (cs && routeCache[cs] !== undefined) showRoute(routeCache[cs], ac);
+    if (cs && routeCache.has(cs)) showRoute(routeCache.get(cs), ac);
     else loadRoute(ac);
   }
   // Chiude la full, torna all'etichetta ancorata
@@ -888,8 +891,9 @@ export function initApp() {
 
   function passFlightLabel(ac) {
     var cs = (ac.flight || '').trim();
-    if (cs && routeCache[cs]) {
-      var num = fmtFlight(routeCache[cs].flightIata);
+    var r = cs ? routeCache.get(cs) : null;
+    if (r) {
+      var num = fmtFlight(r.flightIata);
       if (num) return num;
     }
     return cs || ac.hex.toUpperCase();
@@ -1151,6 +1155,10 @@ export function initApp() {
       if (!seen[mid]) {
         map.removeLayer(markers[mid]); delete markers[mid]; delete markerState[mid];
         if (trails[mid]) { if (trails[mid].line) map.removeLayer(trails[mid].line); delete trails[mid]; }
+        // Lo stato "vicino a un incendio" vale per un aereo che stiamo
+        // guardando: quando esce dal radar se ne va con lui, invece di
+        // restare in memoria per il resto della sessione.
+        delete fireNear[mid]; delete fireCheckAt[mid]; delete fireCheckSeq[mid];
         if (selected === mid) closeSheet();
       }
     }
