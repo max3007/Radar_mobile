@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { creaBanner } from '../src/banner.js';
-import { ErroreVoli } from '../src/rete.js';
-import { t, setLang } from '../src/i18n.js';
+import { creaBanner } from '../src/ui/banner.js';
+import { ErroreVoli } from '../src/servizi/voli.js';
+import { t, setLang } from '../src/ui/i18n.js';
 
 // Il traduttore e quello VERO dell'app, non un finto dizionario: cosi le
 // frasi attese qui sotto non possono divergere da quelle che l'utente legge.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { esc } from '../src/dom.js';
+import { esc } from '../src/ui/dom.js';
 
 describe('esc', () => {
   // I dati che finiscono nelle liste NON sono nostri: callsign e tipo vengono

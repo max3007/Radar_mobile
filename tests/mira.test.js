@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { guidaMira, LOCK_IN, LOCK_OUT, SCALE_DEG } from '../src/mira.js';
+import { guidaMira, LOCK_IN, LOCK_OUT, SCALE_DEG } from '../src/funzioni/mira.js';
 
 // Scorciatoia: due assi, entrambi col sensore di inclinazione disponibile.
 function g(diffAz, diffEl, eraAgganciato = false) {

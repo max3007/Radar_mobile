@@ -9,7 +9,7 @@
 // e' inutilizzabile.
 
 import L from 'leaflet';
-import { FIRE_WMS, wmsTimeRange } from './config.js';
+import { FIRE_WMS, wmsTimeRange } from '../config.js';
 
 /**
  * @param {object}   cfg

@@ -10,8 +10,8 @@
 //   poteva arrivare.
 // - creaMira() esegue. Parla con i sensori e scrive nel DOM.
 
-import { t } from './i18n.js';
-import { bearingFromCenter, elevationAngle } from './domain.js';
+import { t } from '../ui/i18n.js';
+import { bearingFromCenter, elevationAngle } from '../dominio/index.js';
 
 export var SMOOTH = 0.15;    // 0..1: piu basso = piu stabile ma piu lento
 export var LOCK_IN = 8;      // entra in allineamento sotto questa differenza

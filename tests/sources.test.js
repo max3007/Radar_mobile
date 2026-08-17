@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { PLANES_SOURCES, PLANES_SOURCE } from '../src/config.js';
-import { isOnGround, isGroundAlt, altLabel, flightPhase, planeColor, nextPass } from '../src/domain.js';
-import { setLang } from '../src/i18n.js';
+import { isOnGround, isGroundAlt, altLabel, flightPhase, planeColor, nextPass } from '../src/dominio/index.js';
+import { setLang } from '../src/ui/i18n.js';
 
 beforeAll(() => setLang('it'));
 

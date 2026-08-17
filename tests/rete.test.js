@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   creaCoda, ErroreVoli, isCrossOrigin, classificaBlocco, creaCanaleVoli
-} from '../src/rete.js';
+} from '../src/servizi/voli.js';
 
 // Fonte finta con la stessa forma di una voce di PLANES_SOURCES.
 const FONTE = {

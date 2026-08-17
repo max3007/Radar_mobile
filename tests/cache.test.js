@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { creaCache } from '../src/cache.js';
+import { creaCache } from '../src/infra/cache.js';
 
 describe('creaCache', () => {
   it('si comporta come una mappa finche sta nella capienza', () => {

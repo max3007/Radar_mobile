@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { datiEtichetta } from '../src/domain.js';
-import { setLang } from '../src/i18n.js';
+import { datiEtichetta } from '../src/dominio/index.js';
+import { setLang } from '../src/ui/i18n.js';
 
 // Un aereo vero, catturato sopra Fiumicino: ITA Airways in salita verso sud.
 const ITY088 = {

@@ -5,28 +5,28 @@
 // (markers, trails, selezione, tag). Dati e funzioni pure sono nei moduli.
 
 import L from 'leaflet';
-import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN, FIRE_WMS, wmsTimeRange, PLANES_API_ENABLED, PLANES_SOURCES, PLANES_SOURCE } from './config.js';
+import { DEFAULT_CENTER, DEFAULT_RADIUS_NM, POLL_INTERVAL_MS, API, TILE_STYLES, DEFAULT_MAP_STYLE, PASS_HORIZON_MIN, DEFAULT_PASS_KM, PASS_SCAN_NM, PASS_OVERHEAD_KM, PASS_ALERT_MIN, FIRE_WMS, wmsTimeRange, PLANES_API_ENABLED, PLANES_SOURCES, PLANES_SOURCE } from '../config.js';
 
 // Fonte dei dati di volo in uso (vedi PLANES_SOURCES in config.js)
 var SRC = PLANES_SOURCES[PLANES_SOURCE];
-import { loadPrefs, savePrefs } from './prefs.js';
+import { loadPrefs, savePrefs } from '../servizi/preferenze.js';
 import {
   airlineName, toCallsign, fmtFlight, planeColor, altLabel, isOnGround, compass,
   bearingFromCenter, elevationAngle, emergencyInfo, flightPhase, flightPhaseInfo,
   routeConsistent, nextPass, landingBeforePass, isFirefightingAircraft, datiEtichetta,
   trimToRadius
-} from './domain.js';
-import { t, setLang, detectLang, applyStaticI18n } from './i18n.js';
-import { creaCoda, fetchConScadenza, creaCanaleVoli, API_MIN_GAP_MS } from './rete.js';
-import { creaBanner } from './banner.js';
+} from '../dominio/index.js';
+import { t, setLang, detectLang, applyStaticI18n } from '../ui/i18n.js';
+import { creaCoda, fetchConScadenza, creaCanaleVoli, API_MIN_GAP_MS } from '../servizi/voli.js';
+import { creaBanner } from '../ui/banner.js';
 import {
   iconaAereo, iconaOsservatore, iconaAeroporto, iconaPuntoPassaggio, iconaEtichetta
-} from './icone.js';
-import { creaMira } from './mira.js';
-import { creaOverlayIncendi } from './overlays.js';
-import { esc, delega } from './dom.js';
-import { creaCache } from './cache.js';
-import AIRPORTS from './data/airports.json';
+} from '../ui/icone.js';
+import { creaMira } from '../funzioni/mira.js';
+import { creaOverlayIncendi } from '../ui/overlays.js';
+import { esc, delega } from '../ui/dom.js';
+import { creaCache } from '../infra/cache.js';
+import AIRPORTS from '../data/airports.json';
 
 export function initApp() {
   if (typeof L === 'undefined') {
@@ -192,7 +192,7 @@ export function initApp() {
   var trails = {};       // hex -> { pts, line, color }
   var selected = null;
   var lastAircraft = [];
-  // Cache a capienza limitata: v. src/cache.js per il perche.
+  // Cache a capienza limitata: v. src/infra/cache.js per il perche.
   var photoCache = creaCache(200);   // hex -> {url, credit} | null
   var rings = [];
   var fetchSeq = 0;      // scarta risposte fuori ordine
@@ -249,7 +249,7 @@ export function initApp() {
   }
 
   // ---------- Bussola live: punta il telefono verso l'aereo selezionato ----------
-  // Sensori, filtro e isteresi stanno in src/mira.js. Qui restano solo i due
+  // Sensori, filtro e isteresi stanno in src/funzioni/mira.js. Qui restano solo i due
   // collegamenti con l'app: da dove si guarda e quale aereo si sta seguendo.
   var mira = creaMira({
     getCentro: function () { return CENTER; },
@@ -1212,7 +1212,7 @@ export function initApp() {
   }
 
   // ---------- Rete: coda, scadenza, errori ----------
-  // Il come sta in src/rete.js (verificabile senza browser); qui restano solo
+  // Il come sta in src/servizi/voli.js (verificabile senza browser); qui restano solo
   // i collegamenti con l'app: quale fonte, se le richieste sono abilitate,
   // dove scrivere la diagnostica.
   var turnoLuoghi = creaCoda(API_MIN_GAP_MS); // Nominatim ha lo stesso limite
@@ -1223,7 +1223,7 @@ export function initApp() {
   }).chiediVoli;
 
   // ---------- Banner rosso ----------
-  // Il come sta in src/banner.js. Il ritmo del polling non lo riguarda: il
+  // Il come sta in src/ui/banner.js. Il ritmo del polling non lo riguarda: il
   // backoff resta qui, ai punti di chiamata.
   var banner = creaBanner({ elemento: errBar, t: t, diag: diag });
   function mostraBanner(key, whyKey, whyParams) { banner.mostra(key, whyKey, whyParams); }

@@ -5,8 +5,8 @@ import {
   bearingBetween, bearingFromCenter, elevationAngle, destPoint,
   emergencyInfo, flightPhase, flightPhaseInfo, routeConsistent, nextPass, landingBeforePass,
   isOnGround, altLabel, isFirefightingAircraft
-} from '../src/domain.js';
-import { setLang } from '../src/i18n.js';
+} from '../src/dominio/index.js';
+import { setLang } from '../src/ui/i18n.js';
 
 // I test asseriscono le stringhe italiane: fissa la lingua
 beforeAll(() => setLang('it'));

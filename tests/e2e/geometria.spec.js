@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { preparaRete } from './fixtures.js';
 
-// La nostra distanceM (src/domain.js) deve dare lo STESSO numero di
+// La nostra distanceM (src/dominio/geometria.js) deve dare lo STESSO numero di
 // map.distance di Leaflet, non uno simile: il taglio al raggio usa la nostra,
 // mentre lista TRAFFICO, ricerca e chip rapidi usano quella di Leaflet. Se le
 // due divergessero, al bordo del raggio un aereo comparirebbe nella lista ma
