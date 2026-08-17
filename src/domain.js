@@ -298,3 +298,39 @@ export function flightPhaseInfo(ac) {
 export function flightPhase(ac) {
   return flightPhaseInfo(ac).text;
 }
+
+/**
+ * Cosa scrivere nell'etichetta ancorata all'aereo selezionato sulla mappa.
+ * Il disegno e' in src/icone.js: qui si decide solo il contenuto, e la
+ * decisione piu' delicata e' se fidarsi della rotta d'archivio.
+ *
+ * @param {object} ac     aereo in formato ADSBexchange v2
+ * @param {object} rotta  voce di cache rotte per il suo callsign, o null
+ */
+export function datiEtichetta(ac, rotta) {
+  var cs = (ac.flight || '').trim();
+  var numero = cs || ac.hex.toUpperCase();
+  var rottaTesto = null;
+  if (rotta) {
+    // Numero di volo commerciale, se la rotta ce lo dice: piu' riconoscibile
+    // del callsign operativo (AZA1234 -> AZ1234).
+    var fnum = fmtFlight(rotta.flightIata);
+    if (fnum) numero = fnum;
+    // Le rotte vengono da un archivio: quella registrata puo' non essere
+    // quella che l'aereo sta volando adesso, e una rotta sbagliata in etichetta
+    // e' peggio di nessuna rotta. Si mostra solo se posizione e prua reali la
+    // confermano.
+    if (routeConsistent(ac, rotta)) {
+      rottaTesto = (rotta.orig.iata || rotta.orig.icao || '?') + ' → ' +
+                   (rotta.dest.iata || rotta.dest.icao || '?');
+    }
+  }
+  return {
+    numero: numero,
+    compagnia: airlineName(ac.flight),
+    rotta: rottaTesto,
+    quota: altLabel(ac),
+    velocita: ac.gs != null ? Math.round(ac.gs) + ' kt' : '--',
+    direzione: ac.track != null ? Math.round(ac.track) + '° ' + compass(ac.track) : ''
+  };
+}

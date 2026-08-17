@@ -13,11 +13,14 @@ import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, planeColor, altLabel, isOnGround, compass,
   bearingFromCenter, elevationAngle, emergencyInfo, flightPhase, flightPhaseInfo,
-  routeConsistent, nextPass, landingBeforePass, isFirefightingAircraft
+  routeConsistent, nextPass, landingBeforePass, isFirefightingAircraft, datiEtichetta
 } from './domain.js';
 import { t, setLang, detectLang, applyStaticI18n } from './i18n.js';
 import { creaCoda, fetchConScadenza, creaCanaleVoli, API_MIN_GAP_MS } from './rete.js';
 import { creaBanner } from './banner.js';
+import {
+  iconaAereo, iconaOsservatore, iconaAeroporto, iconaPuntoPassaggio, iconaEtichetta
+} from './icone.js';
 import AIRPORTS from './data/airports.json';
 
 var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
@@ -238,37 +241,8 @@ export function initApp() {
     if (tagMarker) { map.removeLayer(tagMarker); tagMarker = null; }
   }
   function tagIcon(ac) {
-    // Numero volo commerciale se disponibile in cache rotte, altrimenti callsign
     var cs = (ac.flight || '').trim();
-    var num = cs || ac.hex.toUpperCase();
-    var route = null;
-    if (cs && routeCache[cs]) {
-      var r = routeCache[cs];
-      var fnum = fmtFlight(r.flightIata);
-      if (fnum) num = fnum;
-      // Mostra la rotta solo se coerente con posizione e prua reali
-      if (routeConsistent(ac, r)) {
-        route = (r.orig.iata || r.orig.icao || '?') + ' \u2192 ' + (r.dest.iata || r.dest.icao || '?');
-      }
-    }
-    var alt = altLabel(ac);
-    var spd = ac.gs != null ? Math.round(ac.gs) + ' kt' : '--';
-    var dir = ac.track != null ? Math.round(ac.track) + '\u00B0 ' + compass(ac.track) : '';
-    var comp = airlineName(ac.flight);
-    return L.divIcon({
-      className: '',
-      html: '<div class="tag-anchor">' +
-        '<div class="tag-line"></div>' +
-        '<div class="tag-box">' +
-          '<div class="tag-more" aria-hidden="true">\u26F6</div>' +
-          '<div class="l1">' + num + '</div>' +
-          '<div class="l3" style="color:var(--muted);">' + comp + '</div>' +
-          (route ? '<div class="l3">' + route + '</div>' : '') +
-          '<div class="l2">' + alt + ' \u00B7 ' + spd + '</div>' +
-          (dir ? '<div class="l2">' + dir + '</div>' : '') +
-        '</div></div>',
-      iconSize: [0, 0], iconAnchor: [0, 0]
-    });
+    return iconaEtichetta(datiEtichetta(ac, cs ? routeCache[cs] : null));
   }
   function updateTag(ac) {
     if (!ac || ac.lat == null) return;
@@ -478,23 +452,11 @@ export function initApp() {
     drawAirports();  // gli aeroporti seguono centro e raggio correnti
   }
 
-  // Mirino radar sul punto di osservazione: puntino + ping pulsante + crocino
   var observerMarker = null;
-  function observerIcon() {
-    return L.divIcon({
-      className: '',
-      html: '<div class="observer">' +
-        '<span class="obs-ping"></span>' +
-        '<span class="obs-cross"></span>' +
-        '<span class="obs-core"></span>' +
-        '</div>',
-      iconSize: [0, 0], iconAnchor: [0, 0]
-    });
-  }
   function drawObserver() {
     if (!observerMarker) {
       observerMarker = L.marker(CENTER, {
-        icon: observerIcon(), interactive: false, keyboard: false, zIndexOffset: -200
+        icon: iconaOsservatore(), interactive: false, keyboard: false, zIndexOffset: -200
       }).addTo(map);
     } else {
       observerMarker.setLatLng(CENTER);
@@ -503,14 +465,6 @@ export function initApp() {
 
   // ---------- Aeroporti nel raggio ----------
   var airportMarkers = [];
-  function airportIcon(a) {
-    return L.divIcon({
-      className: '',
-      html: '<div class="airport-marker"><span class="airport-dot"></span>' +
-        '<span class="airport-code">' + (a.iata || a.icao) + '</span></div>',
-      iconSize: [0, 0], iconAnchor: [0, 0]
-    });
-  }
   function drawAirports() {
     airportMarkers.forEach(function (m) { map.removeLayer(m); });
     airportMarkers = [];
@@ -524,7 +478,7 @@ export function initApp() {
     list.slice(0, 40).forEach(function (it) {
       var a = it.a;
       var m = L.marker([a.lat, a.lon], {
-        icon: airportIcon(a), keyboard: false, zIndexOffset: -500
+        icon: iconaAeroporto(a), keyboard: false, zIndexOffset: -500
       }).addTo(map);
       m.bindPopup('<b>' + (a.iata || a.icao) + '</b> · ' + a.name, {
         className: 'airport-popup', closeButton: false, offset: [0, -4]
@@ -550,20 +504,7 @@ export function initApp() {
   }
   map.on('move zoom viewreset resize', positionSweep);
 
-  function planeIcon(track, color, isSel, emerg, ff, ffNear) {
-    var cls = 'plane-icon' + (isSel ? ' selected' : '') + (emerg ? ' emerg' : '') +
-      (ff ? ' ff' : '') + (ffNear ? ' ff-near' : '');
-    var fill = emerg ? '#ff3b30' : color;
-    return L.divIcon({
-      className: '',
-      html: '<div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;">' +
-        '<div class="' + cls + '" style="transform: rotate(' + (track||0) + 'deg);">' +
-        '<svg width="22" height="22" viewBox="0 0 24 24" fill="' + fill + '">' +
-        '<path d="M12 2 L14 10 L22 13 L22 15 L14 13.5 L13.5 20 L16 21.5 L16 23 L12 22 L8 23 L8 21.5 L10.5 20 L10 13.5 L2 15 L2 13 L10 10 Z"/>' +
-        '</svg></div></div>',
-      iconSize: [40, 40], iconAnchor: [20, 20]
-    });
-  }
+  var planeIcon = iconaAereo;
 
   function passesFilters(ac) {
     if (filterAirborne && isOnGround(ac)) return false;
@@ -1205,7 +1146,7 @@ export function initApp() {
         color: '#6fd3ff', weight: 1.2, opacity: 0.5, dashArray: '4,6', interactive: false
       }).addTo(passLayer);
       L.marker([p.passLat, p.passLon], {
-        icon: L.divIcon({ className: '', html: '<div class="pass-x">✕</div>', iconSize: [0, 0], iconAnchor: [0, 0] }),
+        icon: iconaPuntoPassaggio(),
         interactive: false, keyboard: false
       }).addTo(passLayer);
     }
