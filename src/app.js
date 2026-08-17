@@ -23,6 +23,7 @@ import {
 } from './icone.js';
 import { creaMira } from './mira.js';
 import { creaOverlayIncendi } from './overlays.js';
+import { esc, delega } from './dom.js';
 import AIRPORTS from './data/airports.json';
 
 var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
@@ -740,41 +741,34 @@ export function initApp() {
     var html = '';
     for (var i = 0; i < list.length; i++) {
       var a = list[i].ac, km = list[i].d / 1000;
-      var flight = (a.flight || '').trim() || a.hex.toUpperCase();
+      var flight = esc((a.flight || '').trim() || a.hex.toUpperCase());
       var alt = altLabel(a, true) || '--';
       var spd = a.gs != null ? Math.round(a.gs) + ' kt' : '--';
       var emg = !!emergencyInfo(a);
       var phase = flightPhase(a) || '';
       var ff = isFirefightingAircraft(a);
       var ffBadge = ff ? ('<span class="ffbadge">' + (fireNear[a.hex] ? '🔥 ' + t('ff.nearFire') : t('ff.badge')) + '</span>') : '';
-      html += '<div class="acrow' + (emg ? ' emg' : '') + (ff ? ' ff' : '') + '" data-hex="' + a.hex + '">' +
+      html += '<div class="acrow' + (emg ? ' emg' : '') + (ff ? ' ff' : '') + '" data-hex="' + esc(a.hex) + '">' +
         '<div class="ac-l"><div class="ac-f">' + flight + (emg ? '<span class="emgbadge">' + t('emg.badge') + '</span>' : '') + ffBadge + '</div>' +
-          '<div class="ac-sub">' + airlineName(a.flight) + (a.t ? ' · ' + a.t : '') + (phase ? ' · ' + phase : '') + '</div></div>' +
+          '<div class="ac-sub">' + esc(airlineName(a.flight)) + (a.t ? ' · ' + esc(a.t) : '') + (phase ? ' · ' + esc(phase) : '') + '</div></div>' +
         '<div class="ac-r"><div class="ac-alt">' + alt + ' · ' + spd + '</div>' +
           '<div class="ac-dist">' + km.toFixed(0) + ' km ' + compass(bearingFromCenter(CENTER, a.lat, a.lon)) + '</div></div>' +
         '</div>';
     }
-    var box = document.getElementById('planeList');
-    box.innerHTML = html;
-    var rows = box.querySelectorAll('.acrow');
-    for (var k = 0; k < rows.length; k++) {
-      rows[k].addEventListener('click', function () {
-        var hex = this.getAttribute('data-hex');
-        for (var m = 0; m < lastAircraft.length; m++) {
-          if (lastAircraft[m].hex === hex) {
-            vaiAllAereo(lastAircraft[m], { chiudi: 'board' });
-            return;
-          }
-        }
-      });
-    }
+    document.getElementById('planeList').innerHTML = html;
   }
 
-  // Aggiorna le viste del pannello TRAFFICO (solo se aperto)
+  // Aggiorna le viste del pannello TRAFFICO (solo se aperto, e solo la scheda
+  // che si sta guardando). Ridisegnare anche quella nascosta era lavoro
+  // buttato: succedeva a ogni giro di polling, cioe ogni 6 secondi.
+  function schedaBoardVisibile() {
+    return document.getElementById('tabAirlines').style.display === 'block'
+      ? 'airlines' : 'planes';
+  }
   function refreshBoard() {
     if (!isBoardOpen()) return;
-    renderPlaneList();
-    renderBoard();
+    if (schedaBoardVisibile() === 'airlines') renderBoard();
+    else renderPlaneList();
   }
 
   // Tab AEREI / COMPAGNIE
@@ -786,6 +780,7 @@ export function initApp() {
         for (var j = 0; j < tabs.length; j++) tabs[j].classList.toggle('active', tabs[j] === this);
         document.getElementById('tabPlanes').style.display = which === 'planes' ? 'block' : 'none';
         document.getElementById('tabAirlines').style.display = which === 'airlines' ? 'block' : 'none';
+        refreshBoard();   // la scheda appena scoperta va popolata subito
       });
     }
   })();
@@ -813,16 +808,9 @@ export function initApp() {
     });
     var html = '<div class="opt" data-name="" style="padding:8px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line);">' + t('airline.all') + '</div>';
     for (var i = 0; i < list.length; i++) {
-      html += '<div class="opt" data-name="' + list[i].replace(/"/g,'&quot;') + '" style="padding:8px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line);">' + list[i] + '</div>';
+      html += '<div class="opt" data-name="' + esc(list[i]) + '" style="padding:8px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line);">' + esc(list[i]) + '</div>';
     }
     box.innerHTML = html;
-    var opts = box.querySelectorAll('.opt');
-    for (var j = 0; j < opts.length; j++) {
-      opts[j].addEventListener('click', function () {
-        applyAirlineFilter(this.getAttribute('data-name'));
-        box.style.display = 'none';
-      });
-    }
   }
   var searchInput = document.getElementById('airlineSearch');
   searchInput.addEventListener('focus', function () {
@@ -929,24 +917,15 @@ export function initApp() {
       var etaBig = mins <= 0 ? t('arr.now') : t('arr.inMin', { n: mins });
       var km = p.dMinKm < 1 ? (Math.round(p.dMinKm * 1000) + ' m') : (p.dMinKm.toFixed(p.dMinKm < 10 ? 1 : 0) + ' km');
       var overhead = (p.dMinKm < PASS_OVERHEAD_KM);
-      html += '<div class="pr" data-hex="' + ac.hex + '">' +
+      html += '<div class="pr" data-hex="' + esc(ac.hex) + '">' +
         '<div class="eta"><b>' + etaBig + '</b><span>' + hh + '</span></div>' +
-        '<div class="info"><div class="f">' + passFlightLabel(ac) + '</div>' +
-          '<small>' + airlineName(ac.flight) + (ac.t ? ' · ' + ac.t : '') + '</small>' +
+        '<div class="info"><div class="f">' + esc(passFlightLabel(ac)) + '</div>' +
+          '<small>' + esc(airlineName(ac.flight)) + (ac.t ? ' · ' + esc(ac.t) : '') + '</small>' +
           (overhead ? '<span class="badge">' + t('arr.overhead') + '</span>' : '') + '</div>' +
         '<div class="geo">' + km + '<small>' + t('arr.towards', { elev: p.elevAtPass, dir: compass(p.brgAtPass) }) + '</small></div>' +
         '</div>';
     }
     box.innerHTML = avviso + html;
-    var rows = box.querySelectorAll('.pr');
-    for (var k = 0; k < rows.length; k++) {
-      rows[k].addEventListener('click', function () {
-        var hex = this.getAttribute('data-hex');
-        for (var m = 0; m < passAircraft.length; m++) {
-          if (passAircraft[m].hex === hex) { passPickAndClose(passAircraft[m]); return; }
-        }
-      });
-    }
   }
 
   function passPickAndClose(ac) {
@@ -1185,8 +1164,12 @@ export function initApp() {
     var parts = [radiusNM + ' NM'];
     parts.push(filterAirline ? filterAirline.toUpperCase() : t('hud.all'));
     if (filterAirborne) parts.push(t('hud.inflight'));
+    // observerLabel e filterAirline possono venire da un nome scritto
+    // dall'utente o riletto dalle preferenze: vanno neutralizzati come tutto
+    // il resto che finisce in innerHTML.
     document.getElementById('hudFilters').innerHTML =
-      parts.join(' \u00B7 ') + (observerLabel ? ' \u00B7 <span style="color:var(--phosphor)">\u25C9 ' + observerLabel + '</span>' : '');
+      esc(parts.join(' \u00B7 ')) +
+      (observerLabel ? ' \u00B7 <span style="color:var(--phosphor)">\u25C9 ' + esc(observerLabel) + '</span>' : '');
   }
 
   // ---------- Rete ----------
@@ -1459,21 +1442,12 @@ export function initApp() {
       var a = hits[j];
       var km = map.distance([a.lat, a.lon], CENTER) / 1000;
       var alt = altLabel(a, true);
-      html += '<div class="sr" data-hex="' + a.hex + '">' +
-        '<div class="f">' + ((a.flight || '').trim() || a.hex.toUpperCase()) + '</div>' +
-        '<div class="d">' + airlineName(a.flight) + '<small>' + (a.t || '') + ' \u00B7 ' + alt + '</small></div>' +
+      html += '<div class="sr" data-hex="' + esc(a.hex) + '">' +
+        '<div class="f">' + esc((a.flight || '').trim() || a.hex.toUpperCase()) + '</div>' +
+        '<div class="d">' + esc(airlineName(a.flight)) + '<small>' + esc(a.t || '') + ' \u00B7 ' + alt + '</small></div>' +
         '<div class="km">' + km.toFixed(0) + ' km</div></div>';
     }
     box.innerHTML = html || '<div style="font-size:11px;color:var(--muted);padding:6px 0;">' + t('search.noneInRange') + '</div>';
-    var rows = box.querySelectorAll('.sr');
-    for (var k = 0; k < rows.length; k++) {
-      rows[k].addEventListener('click', function () {
-        var hex = this.getAttribute('data-hex');
-        for (var m = 0; m < lastAircraft.length; m++) {
-          if (lastAircraft[m].hex === hex) { pickAndClose(lastAircraft[m]); return; }
-        }
-      });
-    }
   }
 
   // ---------- Chip rapidi ----------
@@ -1635,30 +1609,20 @@ export function initApp() {
       '<button class="chip loc' + (activeLocation === 'anzio' ? ' active' : '') + '" data-id="anzio">' + t('obs.anzio') + '</button>';
     for (var i = 0; i < userLocations.length; i++) {
       var l = userLocations[i];
-      html += '<button class="chip loc' + (activeLocation === l.id ? ' active' : '') + '" data-id="' + l.id + '">' +
-        l.label.replace(/</g, '&lt;') + '<span class="del" data-del="' + l.id + '">\u2715</span></button>';
+      html += '<button class="chip loc' + (activeLocation === l.id ? ' active' : '') + '" data-id="' + esc(l.id) + '">' +
+        esc(l.label) + '<span class="del" data-del="' + esc(l.id) + '">\u2715</span></button>';
     }
     box.innerHTML = html;
-    var chips = box.querySelectorAll('.chip.loc');
-    for (var j = 0; j < chips.length; j++) {
-      chips[j].addEventListener('click', function (e) {
-        var del = e.target.getAttribute && e.target.getAttribute('data-del');
-        if (del) {
-          e.stopPropagation();
-          var loc = userLocations.filter(function (l) { return l.id === del; })[0];
-          var label = loc ? loc.label : t('loc.thisOne');
-          // Conferma prima di eliminare: la X da sola era troppo facile da toccare
-          askConfirm(t('loc.deleteQ', { name: label }), function () {
-            userLocations = userLocations.filter(function (l) { return l.id !== del; });
-            if (activeLocation === del) { activateLocation('gps', true); return; }
-            renderLocations();
-            savePrefs(buildPrefs());
-          });
-          return;
-        }
-        activateLocation(this.getAttribute('data-id'), true);
-      });
-    }
+  }
+  // Conferma prima di eliminare: la X da sola era troppo facile da toccare
+  function chiediEliminaPostazione(id) {
+    var loc = userLocations.filter(function (l) { return l.id === id; })[0];
+    askConfirm(t('loc.deleteQ', { name: loc ? loc.label : t('loc.thisOne') }), function () {
+      userLocations = userLocations.filter(function (l) { return l.id !== id; });
+      if (activeLocation === id) { activateLocation('gps', true); return; }
+      renderLocations();
+      savePrefs(buildPrefs());
+    });
   }
 
   // ---------- Dialog di conferma generico ----------
@@ -1680,28 +1644,31 @@ export function initApp() {
   document.getElementById('confirmNo').addEventListener('click', hideConfirm);
 
   // ---------- Ricerca luogo per creare una postazione ----------
+  // Ultimi risultati di ricerca luogo: la delega e agganciata una volta sola,
+  // quindi l'elenco su cui lavora deve stare qui e non nella chiusura del
+  // singolo render.
+  var luoghiTrovati = [];
   function renderPlaceResults(list) {
+    luoghiTrovati = list || [];
     var box = document.getElementById('locSearchResults');
-    if (!list || !list.length) { box.innerHTML = ''; return; }
+    if (!luoghiTrovati.length) { box.innerHTML = ''; return; }
     var html = '';
-    for (var i = 0; i < list.length; i++) {
-      var r = list[i];
-      html += '<div class="lr" data-i="' + i + '">' + r.name.replace(/</g, '&lt;') +
-        (r.detail ? '<small>' + r.detail.replace(/</g, '&lt;') + '</small>' : '') + '</div>';
+    for (var i = 0; i < luoghiTrovati.length; i++) {
+      var r = luoghiTrovati[i];
+      html += '<div class="lr" data-i="' + i + '">' + esc(r.name) +
+        (r.detail ? '<small>' + esc(r.detail) + '</small>' : '') + '</div>';
     }
     box.innerHTML = html;
-    var rows = box.querySelectorAll('.lr');
-    for (var j = 0; j < rows.length; j++) {
-      rows[j].addEventListener('click', function () {
-        var r = list[parseInt(this.getAttribute('data-i'), 10)];
-        // Centra la mappa sul luogo (senza cambiare la postazione attiva) e
-        // precompila il nome: basta poi premere "+ SALVA QUI"
-        map.setView([r.lat, r.lon], Math.max(map.getZoom(), 9));
-        document.getElementById('locName').value = r.name.substring(0, 20);
-        box.innerHTML = '';
-        document.getElementById('locSearchNote').textContent = t('loc.ready');
-      });
-    }
+  }
+  function scegliLuogo(i) {
+    var r = luoghiTrovati[i];
+    if (!r) return;
+    // Centra la mappa sul luogo (senza cambiare la postazione attiva) e
+    // precompila il nome: basta poi premere "+ SALVA QUI"
+    map.setView([r.lat, r.lon], Math.max(map.getZoom(), 9));
+    document.getElementById('locName').value = r.name.substring(0, 20);
+    document.getElementById('locSearchResults').innerHTML = '';
+    document.getElementById('locSearchNote').textContent = t('loc.ready');
   }
   async function searchPlace() {
     var q = document.getElementById('locSearch').value.trim();
@@ -1788,6 +1755,41 @@ export function initApp() {
   });
   // Dopo ogni click (che puo aprire/chiudere finestre) allinea la cronologia
   document.addEventListener('click', function () { setTimeout(syncHistoryModal, 0); });
+
+  // ---------- Delega degli eventi delle liste ----------
+  // Tutte le liste dell'app vengono ricostruite con innerHTML, alcune a ogni
+  // giro di polling. Riagganciare un listener per riga costava, misurato su
+  // 400 aerei col pannello TRAFFICO aperto, ~170 ms bloccanti ogni 6 secondi.
+  // I contenitori invece non cambiano mai: basta agganciarsi UNA volta a loro.
+  function perHex(elenco, azione) {
+    return function (riga) {
+      var hex = riga.getAttribute('data-hex');
+      var lista = elenco();
+      for (var i = 0; i < lista.length; i++) {
+        if (lista[i].hex === hex) { azione(lista[i]); return; }
+      }
+    };
+  }
+  delega(document.getElementById('planeList'), '.acrow',
+    perHex(function () { return lastAircraft; }, function (ac) {
+      vaiAllAereo(ac, { chiudi: 'board' });
+    }));
+  delega(document.getElementById('searchResults'), '.sr',
+    perHex(function () { return lastAircraft; }, pickAndClose));
+  delega(document.getElementById('passList'), '.pr',
+    perHex(function () { return passAircraft; }, passPickAndClose));
+  delega(document.getElementById('airlineList'), '.opt', function (riga) {
+    applyAirlineFilter(riga.getAttribute('data-name'));
+    document.getElementById('airlineList').style.display = 'none';
+  });
+  delega(document.getElementById('locList'), '.chip.loc', function (riga, e) {
+    var del = e.target.getAttribute && e.target.getAttribute('data-del');
+    if (del) { e.stopPropagation(); chiediEliminaPostazione(del); return; }
+    activateLocation(riga.getAttribute('data-id'), true);
+  });
+  delega(document.getElementById('locSearchResults'), '.lr', function (riga) {
+    scegliLuogo(parseInt(riga.getAttribute('data-i'), 10));
+  });
 
   // ---------- Avvio ----------
   drawRings();

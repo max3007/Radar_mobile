@@ -11,6 +11,7 @@
 // quando fidarsi di una rotta d'archivio - non era verificabile affatto.
 
 import L from 'leaflet';
+import { esc } from './dom.js';
 
 // Marker senza riquadro ne ombra: il contenuto e' HTML nostro, Leaflet fa
 // solo da ancoraggio geografico.
@@ -60,17 +61,20 @@ export function iconaAeroporto(a) {
   );
 }
 
+// Il contenuto arriva dal feed ADS-B (callsign, tipo) e dall'archivio rotte:
+// non e' roba nostra, quindi passa dall'escape come ogni altro HTML costruito
+// a mano nell'app.
 export function iconaEtichetta(d) {
   return iconaSenzaRiquadro(
     '<div class="tag-anchor">' +
       '<div class="tag-line"></div>' +
       '<div class="tag-box">' +
         '<div class="tag-more" aria-hidden="true">⛶</div>' +
-        '<div class="l1">' + d.numero + '</div>' +
-        '<div class="l3" style="color:var(--muted);">' + d.compagnia + '</div>' +
-        (d.rotta ? '<div class="l3">' + d.rotta + '</div>' : '') +
-        '<div class="l2">' + d.quota + ' · ' + d.velocita + '</div>' +
-        (d.direzione ? '<div class="l2">' + d.direzione + '</div>' : '') +
+        '<div class="l1">' + esc(d.numero) + '</div>' +
+        '<div class="l3" style="color:var(--muted);">' + esc(d.compagnia) + '</div>' +
+        (d.rotta ? '<div class="l3">' + esc(d.rotta) + '</div>' : '') +
+        '<div class="l2">' + esc(d.quota) + ' · ' + esc(d.velocita) + '</div>' +
+        (d.direzione ? '<div class="l2">' + esc(d.direzione) + '</div>' : '') +
       '</div></div>'
   );
 }
