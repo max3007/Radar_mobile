@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
   airlineName, toCallsign, fmtFlight, altColor, planeColor, compass,
+  distanceM, trimToRadius,
   bearingBetween, bearingFromCenter, elevationAngle, destPoint,
   emergencyInfo, flightPhase, flightPhaseInfo, routeConsistent, nextPass, landingBeforePass,
   isOnGround, altLabel, isFirefightingAircraft
@@ -405,5 +406,51 @@ describe('airlineName traduce "Privato"', () => {
     expect(() => airlineName('RYR1WX')).not.toThrow();
     expect(airlineName('RYR1WX')).toBe('Ryanair');
     setLang('it');
+  });
+});
+
+describe('distanceM', () => {
+  // Deve dare lo STESSO numero di map.distance di Leaflet: al bordo del
+  // raggio, altrimenti, un aereo verrebbe incluso da una e scartato
+  // dall'altra. L'accordo e verificato contro Leaflet vero in tests/e2e.
+  it('misura distanze note', () => {
+    // Anzio -> Fiumicino, ~50.8 km
+    expect(distanceM(41.4479, 12.6285, 41.8003, 12.2389)).toBeCloseTo(50834.6, 0);
+    // Anzio -> Catania, ~489.6 km
+    expect(distanceM(41.4479, 12.6285, 37.4668, 15.0664)).toBeCloseTo(489607.1, 0);
+  });
+  it('lo stesso punto dista zero', () => {
+    expect(distanceM(41.4479, 12.6285, 41.4479, 12.6285)).toBe(0);
+  });
+  it('e simmetrica', () => {
+    expect(distanceM(41, 12, 45, 9)).toBeCloseTo(distanceM(45, 9, 41, 12), 6);
+  });
+});
+
+describe('trimToRadius', () => {
+  // adsb.fi filtra per riquadro, non per cerchio: restituisce anche aerei
+  // fuori dall'anello piu esterno del radar.
+  const ANZIO = [41.4479, 12.6285];
+
+  it('usa il campo dst quando la fonte lo fornisce', () => {
+    const list = [{ hex: 'a', lat: 41.5, lon: 12.6, dst: 40 },
+                  { hex: 'b', lat: 41.5, lon: 12.6, dst: 140 }];
+    expect(trimToRadius(list, ANZIO, 100).map(a => a.hex)).toEqual(['a']);
+  });
+
+  it('calcola la distanza quando dst manca', () => {
+    const list = [{ hex: 'vicino', lat: 41.8003, lon: 12.2389 },   // Fiumicino, ~27 NM
+                  { hex: 'lontano', lat: 37.4668, lon: 15.0664 }]; // Catania, ~264 NM
+    expect(trimToRadius(list, ANZIO, 100).map(a => a.hex)).toEqual(['vicino']);
+  });
+
+  it('lascia passare gli aerei senza posizione, li scarta il disegno', () => {
+    const list = [{ hex: 'senzaPos', lat: null, lon: null }];
+    expect(trimToRadius(list, ANZIO, 100)).toHaveLength(1);
+  });
+
+  it('il bordo esatto e incluso', () => {
+    expect(trimToRadius([{ hex: 'x', lat: 41.5, lon: 12.6, dst: 100 }], ANZIO, 100)).toHaveLength(1);
+    expect(trimToRadius([{ hex: 'x', lat: 41.5, lon: 12.6, dst: 100.1 }], ANZIO, 100)).toHaveLength(0);
   });
 });

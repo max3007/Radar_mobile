@@ -13,7 +13,8 @@ import { loadPrefs, savePrefs } from './prefs.js';
 import {
   airlineName, toCallsign, fmtFlight, planeColor, altLabel, isOnGround, compass,
   bearingFromCenter, elevationAngle, emergencyInfo, flightPhase, flightPhaseInfo,
-  routeConsistent, nextPass, landingBeforePass, isFirefightingAircraft, datiEtichetta
+  routeConsistent, nextPass, landingBeforePass, isFirefightingAircraft, datiEtichetta,
+  trimToRadius
 } from './domain.js';
 import { t, setLang, detectLang, applyStaticI18n } from './i18n.js';
 import { creaCoda, fetchConScadenza, creaCanaleVoli, API_MIN_GAP_MS } from './rete.js';
@@ -877,7 +878,7 @@ export function initApp() {
     try {
       var data = await chiediVoli(SRC.point(CENTER[0], CENTER[1], PASS_SCAN_NM));
       if (seq !== passScanSeq || !isPassesOpen()) return;
-      passAircraft = trimToRadius(data.ac || [], PASS_SCAN_NM);
+      passAircraft = tagliaAlRaggio(data.ac || [], PASS_SCAN_NM);
       passScanRidotta = false;
     } catch (e) {
       if (seq !== passScanSeq) return;
@@ -885,8 +886,12 @@ export function initApp() {
       passScanRidotta = true;       // e lo diciamo, invece di far finta di niente
     }
     if (!isPassesOpen()) return;
-    renderPasses();
-    drawPassProjections();
+    // Tabella e proiezioni sulla mappa mostrano la STESSA lista: calcolarla
+    // due volte non era solo spreco, era il modo di farle divergere se un
+    // aereo si muoveva tra un calcolo e l'altro.
+    var passaggi = computePasses();
+    renderPasses(passaggi);
+    drawPassProjections(passaggi);
   }
 
   function passFlightLabel(ac) {
@@ -899,9 +904,9 @@ export function initApp() {
     return cs || ac.hex.toUpperCase();
   }
 
-  function renderPasses() {
+  function renderPasses(passaggi) {
     var box = document.getElementById('passList');
-    var list = computePasses();
+    var list = passaggi || computePasses();
     // Se la scansione ampia non e riuscita lo si dice: mostrare i dati del
     // raggio corrente spacciandoli per una scansione a 250 NM e peggio che
     // non mostrarli.
@@ -941,9 +946,9 @@ export function initApp() {
   function clearPassProjections() {
     if (passLayer) { map.removeLayer(passLayer); passLayer = null; }
   }
-  function drawPassProjections() {
+  function drawPassProjections(passaggi) {
     clearPassProjections();
-    var list = computePasses();
+    var list = passaggi || computePasses();
     if (!list.length) return;
     passLayer = L.layerGroup();
     for (var i = 0; i < list.length; i++) {
@@ -1196,18 +1201,10 @@ export function initApp() {
     if (esito != null) l.textContent = new Date().toLocaleTimeString() + ' → ' + esito;
   }
 
-  // Alcune fonti restituiscono anche aerei un po' oltre il raggio richiesto
-  // (adsb.fi filtra per riquadro, non per cerchio): senza questo taglio si
-  // vedrebbero aerei fuori dall'anello piu esterno del radar. Il campo `dst`
-  // e la distanza in NM dal punto interrogato, quando la fonte la fornisce.
-  function trimToRadius(list, radiusNM) {
-    if (!SRC.trimToRadius) return list;
-    return list.filter(function (a) {
-      if (a.lat == null || a.lon == null) return true; // ci pensa gia drawPlanes
-      var nm = (typeof a.dst === 'number') ? a.dst
-             : map.distance([a.lat, a.lon], CENTER) / 1852;
-      return nm <= radiusNM;
-    });
+  // Il taglio al raggio e geometria pura e sta in domain.js; qui resta solo
+  // la domanda che riguarda l'app: questa fonte ne ha bisogno?
+  function tagliaAlRaggio(list, nm) {
+    return SRC.trimToRadius ? trimToRadius(list, CENTER, nm) : list;
   }
 
   // ---------- Rete: coda, scadenza, errori ----------
@@ -1249,7 +1246,7 @@ export function initApp() {
       return;
     }
     if (seq !== fetchSeq) return; // risposta superata da una piu recente: scarta
-    lastAircraft = trimToRadius(data.ac || [], radiusNM);
+    lastAircraft = tagliaAlRaggio(data.ac || [], radiusNM);
     diag(null, t('diag.ok', { n: lastAircraft.length }));
     clearNetError();
 

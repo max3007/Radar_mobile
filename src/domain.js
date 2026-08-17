@@ -95,6 +95,26 @@ export function compass(bearing) {
   return dirs[Math.round(((bearing % 360) + 360) % 360 / 45) % 8];
 }
 
+// Raggio terrestre in metri. NON e' il raggio medio (6371008.8) ma quello
+// che Leaflet usa in L.CRS.Earth: serve che distanceM() e map.distance()
+// diano lo stesso identico numero, altrimenti al bordo del raggio un aereo
+// verrebbe incluso da una e scartato dall'altra. Verificato in tests/e2e.
+var R_TERRA_M = 6371000;
+
+// Distanza in metri tra due punti (formula dell'emisenoverso).
+// Esiste per togliere Leaflet di mezzo dove serve solo geometria: filtrare
+// una lista di aerei per raggio non e un'operazione di mappa, e legarla a
+// map.distance rendeva impossibile provarla senza un browser.
+export function distanceM(lat1, lon1, lat2, lon2) {
+  var rad = Math.PI / 180;
+  var dLat = (lat2 - lat1) * rad;
+  var dLon = (lon2 - lon1) * rad;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+          Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R_TERRA_M * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export function bearingBetween(lat1, lon1, lat2, lon2) {
   var dLon = (lon2 - lon1) * Math.PI / 180;
   var la1 = lat1 * Math.PI / 180, la2 = lat2 * Math.PI / 180;
@@ -297,6 +317,25 @@ export function flightPhaseInfo(ac) {
 // Solo il testo, per chi deve unicamente scriverlo a schermo
 export function flightPhase(ac) {
   return flightPhaseInfo(ac).text;
+}
+
+/**
+ * Alcune fonti restituiscono anche aerei un po' oltre il raggio richiesto
+ * (adsb.fi filtra per riquadro, non per cerchio): senza questo taglio si
+ * vedrebbero aerei fuori dall'anello piu esterno del radar.
+ *
+ * Il campo `dst` e la distanza in NM gia calcolata dalla fonte: quando c'e si
+ * usa quella, altrimenti si calcola. Gli aerei senza posizione passano: li
+ * scarta gia il disegno.
+ */
+export function trimToRadius(list, center, radiusNM) {
+  return list.filter(function (a) {
+    if (a.lat == null || a.lon == null) return true;
+    var nm = (typeof a.dst === 'number')
+      ? a.dst
+      : distanceM(center[0], center[1], a.lat, a.lon) / 1852;
+    return nm <= radiusNM;
+  });
 }
 
 /**
