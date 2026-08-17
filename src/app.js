@@ -16,6 +16,7 @@ import {
   routeConsistent, nextPass, landingBeforePass, isFirefightingAircraft
 } from './domain.js';
 import { t, setLang, detectLang, applyStaticI18n } from './i18n.js';
+import { creaCoda, fetchConScadenza, creaCanaleVoli, API_MIN_GAP_MS } from './rete.js';
 import AIRPORTS from './data/airports.json';
 
 var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
@@ -1453,93 +1454,16 @@ export function initApp() {
     });
   }
 
-  // ---------- Coda delle richieste ----------
-  // Le API pubbliche che usiamo accettano circa UNA richiesta al secondo.
-  // L'app pero ne fa partire due ravvicinate ogni volta che il pannello IN
-  // ARRIVO e aperto (polling nel raggio + scansione a 250 NM): la seconda
-  // veniva rifiutata e in app si leggeva "SEGNALE PERSO" senza motivo.
-  // Ogni coda prenota a chi chiama il suo turno.
-  function creaCoda(gapMs) {
-    var prossimoTurno = 0;
-    return function attendiTurno() {
-      var ora = Date.now();
-      var turno = Math.max(ora, prossimoTurno);
-      prossimoTurno = turno + gapMs;
-      var attesa = turno - ora;
-      return attesa > 0 ? new Promise(function (r) { setTimeout(r, attesa); }) : Promise.resolve();
-    };
-  }
-  var API_MIN_GAP_MS = 1100;
-  var API_TIMEOUT_MS = 15000;   // oltre, la richiesta e considerata persa
-  var turnoVoli = creaCoda(API_MIN_GAP_MS);
+  // ---------- Rete: coda, scadenza, errori ----------
+  // Il come sta in src/rete.js (verificabile senza browser); qui restano solo
+  // i collegamenti con l'app: quale fonte, se le richieste sono abilitate,
+  // dove scrivere la diagnostica.
   var turnoLuoghi = creaCoda(API_MIN_GAP_MS); // Nominatim ha lo stesso limite
-
-  // Scadenza su OGNI richiesta: una che resta appesa senza mai concludersi
-  // (capita quando il telefono congela la pagina a meta) lasciava "cerco..."
-  // nel pannello per sempre e bloccava il ciclo di aggiornamento.
-  function fetchConScadenza(url, opzioni) {
-    if (typeof AbortController === 'undefined') return fetch(url, opzioni);
-    var ctrl = new AbortController();
-    var killer = setTimeout(function () { ctrl.abort(); }, API_TIMEOUT_MS);
-    var o = Object.assign({}, opzioni || {}, { signal: ctrl.signal });
-    return fetch(url, o).finally(function () { clearTimeout(killer); });
-  }
-
-  // ---------- Errori con la lingua rimandata ----------
-  // Conserviamo CHIAVE e parametri, non la frase gia tradotta: solo cosi il
-  // banner si puo ridisegnare nella lingua giusta quando l'utente la cambia.
-  // Prima teneva il testo tradotto e al cambio lingua restava mezzo in
-  // italiano, oppure veniva riportato a un messaggio generico che diceva
-  // tutt'altro ("segnale perso" al posto di "dati sospesi").
-  function ErroreVoli(whyKey, whyParams, sospeso) {
-    var e = new Error(whyKey);
-    e.whyKey = whyKey;
-    e.whyParams = whyParams || null;
-    e.sospeso = !!sospeso;
-    return e;
-  }
-
-  // La diagnosi CORS ha senso SOLO su URL di un altro dominio: con la fonte
-  // attuale le chiamate sono al nostro stesso dominio (/adsb/..., inoltrato
-  // da vercel.json) e il CORS non entra proprio in gioco. La sonda resta per
-  // il caso in cui si torni a una fonte cross-origin, ma non spreca piu una
-  // richiesta quando non puo dire nulla.
-  function isCrossOrigin(url) {
-    return /^https?:\/\//i.test(url) && url.indexOf(location.origin) !== 0;
-  }
-  function classificaBlocco(url) {
-    if (!isCrossOrigin(url)) return Promise.resolve('err.blocked');
-    return fetch(url, { mode: 'no-cors', cache: 'no-store' })
-      .then(function () { return 'err.cors'; })
-      .catch(function () { return 'err.blocked'; });
-  }
-
-  // ---------- L'unico modo di interrogare i dati di volo ----------
-  // Applica SEMPRE, nello stesso ordine: interruttore generale, turno nella
-  // coda, scadenza, controllo dell'errore nel corpo, diagnostica. Prima ogni
-  // chiamante ne applicava un sottoinsieme diverso: per questo la ricerca
-  // volo dichiarava "non in volo" quando la fonte aveva rifiutato, e la
-  // scansione a 250 NM falliva in silenzio mostrando altri dati.
-  async function chiediVoli(url) {
-    diag(url, null);
-    if (!PLANES_API_ENABLED) throw ErroreVoli('hud.apiSuspended', null, true);
-    var res;
-    try {
-      await turnoVoli();
-      res = await fetchConScadenza(url);
-    } catch (e) {
-      var chiave = (navigator.onLine === false) ? 'err.offline' : await classificaBlocco(url);
-      throw ErroreVoli(chiave);
-    }
-    if (!res.ok) throw ErroreVoli('err.http', { code: res.status });
-    var data = await res.json();
-    // La fonte puo rispondere con successo ma con un corpo di errore: e cosi
-    // che airplanes.live comunicava il blocco. Dove sta scritto l'errore
-    // cambia da fornitore a fornitore: lo sa la fonte, non noi.
-    var apiErr = SRC.errorOf(data);
-    if (apiErr) throw ErroreVoli('err.apiSaid', { msg: String(apiErr).slice(0, 90) });
-    return data;
-  }
+  var chiediVoli = creaCanaleVoli({
+    fonte: SRC,
+    abilitata: PLANES_API_ENABLED,
+    diag: diag
+  }).chiediVoli;
 
   // ---------- Banner rosso ----------
   var bannerStato = null;   // { key, whyKey, whyParams } oppure null
