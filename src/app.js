@@ -28,25 +28,29 @@ import { esc, delega } from './dom.js';
 import { creaCache } from './cache.js';
 import AIRPORTS from './data/airports.json';
 
-var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
-var radiusNM = DEFAULT_RADIUS_NM;
-var filterAirline = "";
-var filterAirborne = false;
-var mapStyle = DEFAULT_MAP_STYLE;
-var passKm = DEFAULT_PASS_KM;   // soglia distanza dei passaggi "IN ARRIVO"
-var lang = detectLang();        // lingua UI: rilevata dal dispositivo, override in impostazioni
-var showFires = false;          // overlay incendi attivi (EFFIS hotspot) attivo?
-var showBurnt = false;          // overlay perimetri aree bruciate (EFFIS) attivo?
-// Multi-postazione: punti di osservazione salvati + selezione attiva.
-// 'gps' (segue la posizione) e 'anzio' sono di sistema, il resto e dell'utente.
-var userLocations = [];
-var activeLocation = 'gps';
-
 export function initApp() {
   if (typeof L === 'undefined') {
     document.getElementById('hud').innerHTML = '<div style="padding:8px;font-size:12px;">' + t('err.leaflet') + '</div>';
     return;
   }
+
+  // Stato dell'app. Sta DENTRO initApp e non a livello di modulo: fuori era
+  // stato condiviso da chiunque importasse questo file, quindi una seconda
+  // istanza avrebbe scritto sulla prima e i test non potevano ripartire
+  // puliti. Qui la vita di queste variabili coincide con quella dell'app.
+  var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
+  var radiusNM = DEFAULT_RADIUS_NM;
+  var filterAirline = '';
+  var filterAirborne = false;
+  var mapStyle = DEFAULT_MAP_STYLE;
+  var passKm = DEFAULT_PASS_KM;   // soglia distanza dei passaggi "IN ARRIVO"
+  var lang = detectLang();        // lingua UI: dal dispositivo, override in impostazioni
+  var showFires = false;          // overlay incendi attivi (EFFIS hotspot)
+  var showBurnt = false;          // overlay perimetri aree bruciate (EFFIS)
+  // Multi-postazione: punti di osservazione salvati + selezione attiva.
+  // 'gps' (segue la posizione) e 'anzio' sono di sistema, il resto e dell'utente.
+  var userLocations = [];
+  var activeLocation = 'gps';
 
   var p = loadPrefs();
   if (p) {
