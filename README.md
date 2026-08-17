@@ -26,9 +26,11 @@ Funzionalità principali:
 - scheda dettaglio volo (compagnia, tipo, quota, velocità, fase di volo,
   rotta origine→destinazione, foto dell'aereo, dati tecnici); le rotte
   d'archivio incoerenti con la posizione reale vengono nascoste;
-- **MIRA**: mirino a due assi che ti guida a puntare il telefono verso
-  l'aereo selezionato, sia in rotazione (bussola) sia in alzata
-  (inclinazione), con calibrazione dell'orizzonte;
+- **MIRA**: un cerchio fermo al centro dello schermo mostra dove stai
+  guardando, una freccia fuori dal cerchio ruota per indicarti da che parte
+  girarti e al centro leggi quanti gradi mancano. Guida sia in rotazione
+  (bussola) sia in alzata (inclinazione), con calibrazione dell'orizzonte;
+  quando inquadri l'aereo il cerchio si accende e la freccia sparisce;
 - **segui un aereo**: la campanella nella scheda attiva un avviso in-app
   (banner + vibrazione + suono) quando quell'aereo sta per passarti vicino
   (entro ~2 minuti). Funziona con l'app aperta; le notifiche a schermo spento

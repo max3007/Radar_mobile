@@ -57,20 +57,14 @@
   <!-- Overlay MIRA: mirino 2D (rotazione + alzata), live coi sensori del telefono -->
   <div id="miraOverlay" style="display:none;position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);z-index:1100;text-align:center;pointer-events:auto;width:min(320px,86vw);">
     <div id="miraBox">
-      <!-- Assi di riferimento -->
-      <div class="mira-axis-h"></div>
-      <div class="mira-axis-v"></div>
-      <!-- Zona di allineamento al centro -->
-      <div class="mira-lockzone"></div>
-      <!-- Bersaglio: si muove su X (rotazione) e Y (alzata) -->
-      <div id="miraTarget">&#9992;</div>
-      <!-- Bordo acceso quando l'aereo e inquadrato -->
-      <div id="miraLocked"></div>
-      <!-- Etichette assi -->
-      <div class="mira-lbl" data-i18n="miralbl.left" style="left:6px;top:50%;transform:translateY(-50%);">SX</div>
-      <div class="mira-lbl" data-i18n="miralbl.right" style="right:6px;top:50%;transform:translateY(-50%);">DX</div>
-      <div class="mira-lbl" data-i18n="miralbl.up" style="top:6px;left:50%;transform:translateX(-50%);">SU</div>
-      <div class="mira-lbl" data-i18n="miralbl.down" style="bottom:6px;left:50%;transform:translateX(-50%);">GIU</div>
+      <!-- Cerchio FERMO: dove stai guardando adesso. Non si muove mai. -->
+      <div class="mira-cerchio">
+        <div class="mira-mirino"></div>
+        <div class="mira-gradi" id="miraGradi">--</div>
+      </div>
+      <!-- Freccia FUORI dal cerchio: ruota per indicare da che parte girarsi.
+           Sparisce quando l'aereo e inquadrato. -->
+      <div class="mira-freccia" id="miraFreccia"><div class="mira-punta"></div></div>
     </div>
     <div id="miraStatus" style="margin-top:10px;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--phosphor);background:rgba(6,10,14,0.8);border-radius:8px;padding:6px 12px;display:inline-block;white-space:nowrap;">--</div>
     <div style="height:6px;"></div>

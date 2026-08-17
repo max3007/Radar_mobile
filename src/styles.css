@@ -313,32 +313,73 @@
       .observer .obs-ping { animation: none; opacity: 0; }
     }
 
-    /* MIRA — mirino 2D: rotazione (X) + alzata (Y) */
+    /* MIRA — cerchio fermo + freccia esterna che indica dove girarsi.
+       Il cerchio e dove stai guardando adesso e NON si muove mai: e il
+       riferimento. Si muove la freccia, che sta fuori dal cerchio e ruota.
+       Cosi la guida resta leggibile a qualunque scarto angolare, anche con
+       l'aereo dietro le spalle — cosa che il vecchio bersaglio mobile non
+       faceva, perche oltre i 60 gradi restava appiccicato al bordo. */
     #miraBox {
-      position: relative; width: min(240px, 74vw); aspect-ratio: 1 / 1; margin: 0 auto;
-      background: rgba(6,10,14,0.72); border: 1px solid rgba(52,224,138,0.5);
-      border-radius: 14px; overflow: hidden; backdrop-filter: blur(2px);
-      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+      position: relative; width: min(280px, 82vw); aspect-ratio: 1 / 1; margin: 0 auto;
     }
-    #miraBox .mira-axis-h { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(52,224,138,0.28); }
-    #miraBox .mira-axis-v { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(52,224,138,0.28); }
-    #miraBox .mira-lockzone {
-      position: absolute; left: 50%; top: 50%; width: 44px; height: 44px;
-      margin: -22px 0 0 -22px; border: 1px dashed var(--phosphor); border-radius: 50%; opacity: 0.6;
+    #miraBox .mira-cerchio {
+      position: absolute; left: 50%; top: 50%; width: 68%; aspect-ratio: 1 / 1;
+      transform: translate(-50%, -50%); border-radius: 50%;
+      border: 5px solid rgba(207,232,218,0.34);
+      background: rgba(6,10,14,0.16);
+      box-shadow: 0 0 18px rgba(0,0,0,0.45);
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
-    #miraTarget {
-      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-      transition: left 0.12s linear, top 0.12s linear;
-      font-size: 30px; color: var(--amber); text-shadow: 0 0 10px rgba(255,180,84,0.85);
+    /* Crocino al centro: dice esattamente dove sta puntando il telefono */
+    #miraBox .mira-mirino {
+      position: absolute; width: 16px; height: 16px; opacity: 0.5;
+      background:
+        linear-gradient(var(--text), var(--text)) center/1px 100% no-repeat,
+        linear-gradient(var(--text), var(--text)) center/100% 1px no-repeat;
     }
-    #miraLocked {
-      display: none; position: absolute; inset: 0; border-radius: 14px;
-      border: 2px solid var(--phosphor); box-shadow: 0 0 20px rgba(52,224,138,0.8) inset;
-      animation: blink 1s infinite;
+    /* I gradi stanno in basso a destra e non al centro: al centro finiscono
+       sotto l'etichetta ancorata dell'aereo, che e centrata anche lei. */
+    #miraBox .mira-gradi {
+      position: absolute; right: 12%; bottom: 12%;
+      font-family: var(--mono); font-size: 27px; font-weight: 700;
+      color: var(--text); letter-spacing: -1px;
+      padding: 1px 7px; border-radius: 6px;
+      background: rgba(6,10,14,0.7);
+      text-shadow: 0 1px 6px rgba(0,0,0,0.9);
     }
-    #miraBox .mira-lbl {
-      position: absolute; font-size: 8px; letter-spacing: 1px; color: var(--muted); font-family: var(--mono);
+    /* Il wrapper ruota attorno al centro del box; la punta sta in cima,
+       quindi finisce sempre appena fuori dal cerchio nella direzione giusta. */
+    #miraBox .mira-freccia {
+      position: absolute; inset: 0; transform-origin: 50% 50%;
+      transition: transform 0.14s linear, opacity 0.2s ease;
+      pointer-events: none;
     }
+    /* Appoggiata al bordo del cerchio, con la punta verso l'esterno: e la
+       direzione in cui devi girarti, non un indicatore astratto. */
+    #miraBox .mira-punta {
+      position: absolute; left: 50%; top: 2px; width: 34px; height: 46px;
+      margin-left: -17px;
+      background: var(--amber);
+      clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%);
+      filter: drop-shadow(0 0 9px rgba(255,180,84,0.7));
+    }
+    /* Agganciato: il cerchio si accende e la freccia sparisce — indicare una
+       direzione quando ci sei gia confonde invece di aiutare. */
+    #miraBox.agganciato .mira-cerchio {
+      border-color: var(--phosphor);
+      box-shadow: 0 0 26px rgba(52,224,138,0.55), 0 0 14px rgba(52,224,138,0.4) inset;
+      animation: blink 1.1s infinite;
+    }
+    #miraBox.agganciato .mira-freccia { opacity: 0; }
+    #miraBox.agganciato .mira-gradi { color: var(--phosphor); opacity: 1; }
+    @media (prefers-reduced-motion: reduce) {
+      #miraBox .mira-freccia { transition: none; }
+      #miraBox.agganciato .mira-cerchio { animation: none; }
+    }
+    /* v. il commento in funzioni/mira.js: l'etichetta ancorata e centrata
+       come il mirino e ne coprirebbe i gradi. */
+    body.mira-attiva .tag-anchor { display: none; }
 
     /* "IN ARRIVO": righe passaggi previsti (cliccabili) */
     #passList .pr {

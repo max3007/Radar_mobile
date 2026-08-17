@@ -128,7 +128,6 @@ const DICT = {
     // Dialoghi / MIRA box / lingua
     'dlg.delete': 'ELIMINA', 'dlg.cancel': 'ANNULLA', 'above.showAnyway': 'MOSTRA COMUNQUE',
     'mira.calibBtn': 'CALIBRA ORIZZONTE',
-    'miralbl.left': 'SX', 'miralbl.right': 'DX', 'miralbl.up': 'SU', 'miralbl.down': 'GIU',
     // Errori generici
     'err.leaflet': 'Errore: Leaflet non caricato (serve connessione)',
     'geo.unavailable': 'Geolocalizzazione non disponibile:'
@@ -237,7 +236,6 @@ const DICT = {
     'follow.on': 'Alert on: tap to remove', 'follow.off': 'Alert me when it passes close',
     'dlg.delete': 'DELETE', 'dlg.cancel': 'CANCEL', 'above.showAnyway': 'SHOW ANYWAY',
     'mira.calibBtn': 'CALIBRATE HORIZON',
-    'miralbl.left': 'L', 'miralbl.right': 'R', 'miralbl.up': 'UP', 'miralbl.down': 'DN',
     'err.leaflet': 'Error: Leaflet not loaded (needs connection)',
     'geo.unavailable': 'Geolocation unavailable:'
   }

@@ -22,8 +22,8 @@ framework — scelta deliberata: il cuore è codice imperativo Leaflet).
 ```bash
 npm install
 npm run dev        # sviluppo (http://localhost:5173)
-npm test           # unit test dei moduli (179)
-npm run test:e2e   # prove interfaccia su browser vero (26)
+npm test           # unit test dei moduli (186)
+npm run test:e2e   # prove interfaccia su browser vero (32)
 npm run test:all   # entrambi
 npm run build      # produzione in dist/
 npm run preview    # anteprima build (http://localhost:4173)
@@ -76,7 +76,8 @@ src/config.js       costanti e fonti dati: centro, raggio, polling, stili mappa,
    traffico.js      pannello TRAFFICO: lista aerei + classifica compagnie
    inarrivo.js      IN ARRIVO: scansione a 250 NM, tabella, proiezioni
    seguiti.js       aerei seguiti e avviso al sorvolo
-   mira.js          guidaMira() pura (isteresi) + creaMira() con i sensori
+   mira.js          guidaMira() pura (isteresi, angolo della freccia, gradi
+                    mancanti) + creaMira() che parla con i sensori
 
 ── infra/ ────────── STRUMENTI senza dominio.
    cache.js         cache a capienza limitata con sfratto del meno usato

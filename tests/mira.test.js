@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { guidaMira, LOCK_IN, LOCK_OUT, SCALE_DEG } from '../src/funzioni/mira.js';
+import { guidaMira, LOCK_IN, LOCK_OUT } from '../src/funzioni/mira.js';
 
 // Scorciatoia: due assi, entrambi col sensore di inclinazione disponibile.
 function g(diffAz, diffEl, eraAgganciato = false) {
@@ -8,7 +8,7 @@ function g(diffAz, diffEl, eraAgganciato = false) {
 
 describe('Isteresi: aggancio e sgancio', () => {
   // Il motivo per cui le soglie sono due e non una: con una sola, sul bordo
-  // il mirino alternava di continuo tra "allineato" e "non allineato" a ogni
+  // il cerchio alternava di continuo tra "allineato" e "non allineato" a ogni
   // micro-movimento della mano. La differenza si vede solo passando per uno
   // stato precedente, cioe' proprio quello che un test puo fare e un occhio no.
 
@@ -32,49 +32,71 @@ describe('Isteresi: aggancio e sgancio', () => {
   it('si sgancia solo oltre la soglia larga', () => {
     expect(g(LOCK_OUT + 1, 0, true).agganciato).toBe(false);
   });
-
-  it('agganciato, il mirino sta fermo al centro', () => {
-    // Fermo apposta: inseguire i decimi di grado quando ormai ci siamo
-    // produce solo tremolio.
-    const r = g(2, 2, true);
-    expect(r.sinistraPct).toBe(50);
-    expect(r.altoPct).toBe(50);
-    expect(r.statoKey).toBe('mira.aligned');
-    expect(r.subKey).toBe('mira.framed');
-  });
 });
 
-describe('Dove va il mirino', () => {
-  it('al centro quando non c e niente da correggere', () => {
-    const r = g(0, 0);
-    expect(r.sinistraPct).toBe(50);
-    expect(r.altoPct).toBe(50);
+describe('Dove punta la freccia', () => {
+  // Convenzione: 0 = su, 90 = destra, 180 = giu, -90 = sinistra. E la stessa
+  // di rotate() in CSS, cosi il valore va usato tale e quale senza conversioni
+  // a meta strada — che sono il posto dove un segno si perde.
+
+  it('in alto se il bersaglio e piu alto', () => {
+    expect(g(0, 30).angoloFreccia).toBe(0);
   });
 
   it('a destra se il bersaglio e a destra', () => {
-    expect(g(30, 0).sinistraPct).toBeGreaterThan(50);
+    expect(g(30, 0).angoloFreccia).toBe(90);
   });
 
-  it('in alto se il bersaglio e piu alto', () => {
-    // altoPct piu piccolo = piu vicino al bordo superiore
-    expect(g(0, 30).altoPct).toBeLessThan(50);
+  it('in basso se il bersaglio e piu in basso', () => {
+    expect(Math.abs(g(0, -30).angoloFreccia)).toBe(180);
   });
 
-  it('non esce mai dal mirino, per quanto sia lontano', () => {
-    // Senza il limite, un bersaglio a 180 gradi finirebbe fuori dallo schermo
-    // e l'utente non vedrebbe piu nulla da seguire.
-    for (const az of [90, 179, -179, -90]) {
-      const r = g(az, 120);
-      expect(r.sinistraPct).toBeGreaterThanOrEqual(5);
-      expect(r.sinistraPct).toBeLessThanOrEqual(95);
-      expect(r.altoPct).toBeGreaterThanOrEqual(5);
-      expect(r.altoPct).toBeLessThanOrEqual(95);
+  it('a sinistra se il bersaglio e a sinistra', () => {
+    expect(g(-30, 0).angoloFreccia).toBe(-90);
+  });
+
+  it('in diagonale quando serve correggere su entrambi gli assi', () => {
+    // Stessa quantita sui due assi: esattamente a 45 gradi
+    expect(g(30, 30).angoloFreccia).toBe(45);
+    expect(g(-30, 30).angoloFreccia).toBe(-45);
+    expect(g(30, -30).angoloFreccia).toBe(135);
+  });
+
+  it('indica la direzione anche con l aereo dietro le spalle', () => {
+    // Il difetto del vecchio mirino mobile: oltre i 60 gradi il bersaglio
+    // restava appiccicato al bordo, quindi proprio quando sei piu disorientato
+    // smetteva di dire qualcosa di utile. La freccia no.
+    const dietro = g(170, 0);
+    expect(dietro.angoloFreccia).toBe(90);      // gira a destra
+    expect(dietro.distanzaGradi).toBe(170);     // e ti dice quanto
+  });
+
+  it('agganciato non indica nessuna direzione', () => {
+    // Quando ci sei, una freccia che punta da qualche parte confonde.
+    expect(g(2, 2, true).angoloFreccia).toBe(0);
+  });
+});
+
+describe('Quanti gradi mancano', () => {
+  it('e lo scarto complessivo sui due assi, non uno dei due', () => {
+    // 3-4-5: il classico triangolo, cosi il numero atteso non e arrotondato
+    expect(g(30, 40).distanzaGradi).toBe(50);
+  });
+
+  it('su un asse solo coincide con quell asse', () => {
+    expect(g(41, 0).distanzaGradi).toBe(41);
+    expect(g(0, -25).distanzaGradi).toBe(25);
+  });
+
+  it('e sempre positivo, da qualunque parte sia il bersaglio', () => {
+    for (const [az, el] of [[30, 40], [-30, 40], [30, -40], [-30, -40]]) {
+      expect(g(az, el).distanzaGradi).toBe(50);
     }
   });
 
-  it('al bordo esatto della scala tocca il limite', () => {
-    expect(g(SCALE_DEG, 0).sinistraPct).toBe(95);
-    expect(g(-SCALE_DEG, 0).sinistraPct).toBe(5);
+  it('resta visibile anche da agganciati', () => {
+    // Utile: dice quanto sei preciso, non solo che ci sei
+    expect(g(3, 4, true).distanzaGradi).toBe(5);
   });
 });
 
@@ -91,7 +113,7 @@ describe('Cosa dice all utente', () => {
 
   it('dice che un asse e a posto anche se l altro no', () => {
     // Le due righe ci sono sempre entrambe: cosi l'altezza del blocco non
-    // cambia mai e il mirino non trasla mentre lo si sta seguendo.
+    // cambia mai e niente trasla mentre lo si sta seguendo.
     const r = g(2, 40);
     expect(r.statoKey).toBe('mira.rotOk');
     expect(r.subKey).toBe('mira.up');
@@ -112,7 +134,15 @@ describe('Telefono senza sensore di inclinazione', () => {
     expect(r.statoKey).toBe('mira.right');
     expect(r.subKey).toBe('mira.elevOf');
     expect(r.subParams).toEqual({ v: '42°' });
-    expect(r.altoPct).toBe(50);   // niente da dire sull'asse verticale
+  });
+
+  it('la freccia resta sull orizzontale, senza inventare una verticale', () => {
+    expect(guidaMira(30, null, false, false, 42).angoloFreccia).toBe(90);
+    expect(guidaMira(-30, null, false, false, 42).angoloFreccia).toBe(-90);
+  });
+
+  it('i gradi contano solo la rotazione, non una precisione che non abbiamo', () => {
+    expect(guidaMira(41, null, false, false, 42).distanzaGradi).toBe(41);
   });
 
   it('con elevazione sconosciuta lo dichiara invece di inventare', () => {

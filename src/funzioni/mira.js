@@ -16,10 +16,19 @@ import { bearingFromCenter, elevationAngle } from '../dominio/index.js';
 export var SMOOTH = 0.15;    // 0..1: piu basso = piu stabile ma piu lento
 export var LOCK_IN = 8;      // entra in allineamento sotto questa differenza
 export var LOCK_OUT = 15;    // esce solo oltre questa (isteresi anti-tremolio)
-export var SCALE_DEG = 60;   // gradi visibili dal centro al bordo del mirino
 
 /**
- * Dove mettere il mirino e cosa dire, date le differenze rispetto al bersaglio.
+ * Dove puntare la freccia e cosa dire, date le differenze dal bersaglio.
+ *
+ * Il modello visivo: un cerchio FERMO al centro dello schermo (dove stai
+ * guardando adesso) e una freccia FUORI dal cerchio che ruota per indicare da
+ * che parte girarti. Al centro del cerchio, quanto manca in gradi.
+ *
+ * Prima il mirino era un bersaglio che si spostava dentro un riquadro. Il
+ * difetto di quel modello: oltre i 60 gradi di scarto il bersaglio restava
+ * appiccicato al bordo, quindi proprio quando sei piu disorientato smetteva di
+ * dirti qualcosa di utile. Una freccia che ruota indica la direzione giusta a
+ * qualunque distanza angolare, anche se l'aereo e dietro di te.
  *
  * @param {number}  diffAz   gradi da recuperare in rotazione; >0 = ruota a destra
  * @param {number}  diffEl   gradi da recuperare in alzata; >0 = alza il telefono.
@@ -28,31 +37,47 @@ export var SCALE_DEG = 60;   // gradi visibili dal centro al bordo del mirino
  * @param {boolean} eraAgganciato  esito precedente (serve all'isteresi)
  * @param {number}  elevAssoluta   elevazione del bersaglio, per il caso senza
  *                                 inclinazione; null se sconosciuta
+ * @returns {{agganciato:boolean, angoloFreccia:number, distanzaGradi:number,
+ *            statoKey:string, statoParams:object, subKey:string, subParams:object}}
+ *          angoloFreccia: gradi in senso orario con 0 = verso l'alto, cioe'
+ *          esattamente quello che serve a un `transform: rotate()`.
  */
 export function guidaMira(diffAz, diffEl, hasPitch, eraAgganciato, elevAssoluta) {
   var adA = Math.abs(diffAz);
   var adE = hasPitch ? Math.abs(diffEl) : 0;
 
   // Isteresi: si aggancia sotto LOCK_IN ma si sgancia solo oltre LOCK_OUT.
-  // Con una soglia sola, sul bordo il mirino alternava di continuo tra
+  // Con una soglia sola, sul bordo il cerchio alternava di continuo tra
   // "allineato" e "non allineato" a ogni micro-movimento della mano.
   var maxDiff = Math.max(adA, adE);
   var agganciato = eraAgganciato;
   if (!eraAgganciato && maxDiff < LOCK_IN) agganciato = true;
   else if (eraAgganciato && maxDiff > LOCK_OUT) agganciato = false;
 
+  // Scarto complessivo sui due assi: e il numero grande dentro al cerchio.
+  // Senza inclinazione vale solo la rotazione, altrimenti dichiareremmo una
+  // precisione che non abbiamo.
+  var distanza = hasPitch
+    ? Math.round(Math.sqrt(diffAz * diffAz + diffEl * diffEl))
+    : Math.round(adA);
+
   if (agganciato) {
     return {
       agganciato: true,
-      // Fermo al centro: niente micro-rumore quando ormai ci siamo
-      sinistraPct: 50,
-      altoPct: 50,
+      // La freccia sparisce: quando ci sei, indicare una direzione confonde
+      angoloFreccia: 0,
+      distanzaGradi: distanza,
       statoKey: 'mira.aligned', statoParams: null,
       subKey: 'mira.framed', subParams: null
     };
   }
 
-  function clamp(v) { return Math.max(-45, Math.min(45, v / SCALE_DEG * 45)); }
+  // Direzione sullo schermo: 0 = su, 90 = destra, 180 = giu, -90 = sinistra.
+  // atan2(x, y) e non atan2(y, x) proprio per ottenere questa convenzione, che
+  // e quella di rotate() in CSS e della rosa dei venti.
+  var angolo = hasPitch
+    ? Math.atan2(diffAz, diffEl) * 180 / Math.PI
+    : (diffAz > 0 ? 90 : -90);
 
   // Riga 1: rotazione, sempre presente
   var statoKey, statoParams = null;
@@ -63,7 +88,7 @@ export function guidaMira(diffAz, diffEl, hasPitch, eraAgganciato, elevAssoluta)
   }
 
   // Riga 2: elevazione, sempre sotto la prima. Le due righe ci sono sempre
-  // entrambe: cosi' l'altezza del blocco non cambia e il mirino non trasla.
+  // entrambe: cosi' l'altezza del blocco non cambia e nulla trasla.
   var subKey, subParams = null;
   if (!hasPitch) {
     subKey = 'mira.elevOf';
@@ -77,8 +102,8 @@ export function guidaMira(diffAz, diffEl, hasPitch, eraAgganciato, elevAssoluta)
 
   return {
     agganciato: false,
-    sinistraPct: 50 + clamp(diffAz),
-    altoPct: hasPitch ? (50 - clamp(diffEl)) : 50,
+    angoloFreccia: Math.round(angolo),
+    distanzaGradi: distanza,
     statoKey: statoKey, statoParams: statoParams,
     subKey: subKey, subParams: subParams
   };
@@ -153,12 +178,13 @@ export function creaMira(cfg) {
     var g = guidaMira(diffAz, diffEl, hasPitch, agganciato, elevazioneBersaglio());
     agganciato = g.agganciato;
 
-    var target = el('miraTarget');
-    target.style.left = g.sinistraPct + '%';
-    target.style.top = g.altoPct + '%';
+    // La freccia ruota attorno al cerchio; il cerchio non si muove mai.
+    var freccia = el('miraFreccia');
+    freccia.style.transform = 'rotate(' + g.angoloFreccia + 'deg)';
+    el('miraBox').classList.toggle('agganciato', g.agganciato);
+    el('miraGradi').textContent = g.distanzaGradi + '°';
     el('miraStatus').textContent = t(g.statoKey, g.statoParams);
     el('miraSub').textContent = t(g.subKey, g.subParams);
-    el('miraLocked').style.display = g.agganciato ? 'block' : 'none';
   }
 
   function start() {
@@ -169,6 +195,10 @@ export function creaMira(cfg) {
     el('miraOverlay').style.display = 'block';
     scriviElevazioneStatica();
     el('miraStatus').textContent = t('mira.move');
+    // Con MIRA aperta si guarda il cielo, non la mappa: l'etichetta ancorata
+    // all'aereo e centrata come il mirino, quindi finisce sempre dentro il
+    // cerchio e copre proprio i gradi che servono. Sparisce finche dura.
+    document.body.classList.add('mira-attiva');
     function aggancia() {
       attiva = true;
       handler = onOrientation;
@@ -192,6 +222,7 @@ export function creaMira(cfg) {
 
   function stop() {
     attiva = false;
+    document.body.classList.remove('mira-attiva');
     el('miraOverlay').style.display = 'none';
     if (handler) {
       window.removeEventListener('deviceorientationabsolute', handler, true);
