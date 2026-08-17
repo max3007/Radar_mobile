@@ -281,6 +281,31 @@ export function initApp() {
   function clearSearchMarker() {
     if (searchMarker) { map.removeLayer(searchMarker); searchMarker = null; }
   }
+  // Un aereo scelto fuori dal raggio del radar (scansione IN ARRIVO a 250 NM,
+  // ricerca mondiale per numero di volo) non e' tra i marker del polling:
+  // senza un marker suo, il giro successivo lo deseleziona.
+  function mostraAereoCercato(ac) {
+    if (ac.lat == null) return;
+    searchMarker = L.marker([ac.lat, ac.lon], {
+      icon: planeIcon(ac.track, '#ffb454', true)
+    }).addTo(map);
+    searchMarker._ac = ac;
+    searchMarker.on('click', function (e) { L.DomEvent.stopPropagation(e); openSheet(this._ac); });
+  }
+  // L'unico modo di portare la vista su un aereo e selezionarlo. Prima erano
+  // tre varianti (lista TRAFFICO, IN ARRIVO, ricerca volo) che facevano le
+  // stesse cose in ordine diverso e ognuna dimenticava qualcosa.
+  function vaiAllAereo(ac, opz) {
+    opz = opz || {};
+    if (opz.chiudi) chiudiPannello(opz.chiudi);
+    // Il marker della ricerca precedente va tolto sempre: restava sulla mappa
+    // a indicare in arancione un aereo che non era piu' quello selezionato.
+    clearSearchMarker();
+    if (!markers[ac.hex]) mostraAereoCercato(ac);
+    if (ac.lat != null) map.setView([ac.lat, ac.lon], opz.zoom || 9, { animate: true });
+    openSheet(ac);
+    if (opz.full) openFull();
+  }
 
   // ---------- Bussola live: punta il telefono verso l'aereo selezionato ----------
   var miraActive = false;
@@ -429,6 +454,13 @@ export function initApp() {
     betaHorizon = lastBeta;
     document.getElementById('miraHint').textContent = t('mira.calibrated');
   });
+
+  // Livello di zoom che fa entrare nello schermo l'anello piu esterno.
+  // Era scritto identico in due punti (applica impostazioni, cambio centro):
+  // ritoccarne uno solo faceva ricentrare la mappa in due modi diversi.
+  function zoomPerRaggio(nm) {
+    return nm > 180 ? 7 : nm > 90 ? 8 : nm > 40 ? 9 : 10;
+  }
 
   function drawRings() {
     rings.forEach(function (r) { map.removeLayer(r); });
@@ -724,8 +756,14 @@ export function initApp() {
     document.getElementById(id).classList.add('open');
     if (PANNELLI[id].onApri) PANNELLI[id].onApri();
   }
+  // Chiudere un pannello passa SEMPRE da qui. Scriverlo a mano con
+  // classList.remove('open') funziona, ma scavalca il registro: e' cosi' che
+  // il tasto BACK si rompe in silenzio quando si aggiunge una finestra.
+  function chiudiPannello(id) {
+    document.getElementById(id).classList.remove('open');
+  }
   function closeAll() {
-    for (var id in PANNELLI) document.getElementById(id).classList.remove('open');
+    for (var id in PANNELLI) chiudiPannello(id);
     clearPassProjections();
     hideAboveDialog();
     hideConfirm();
@@ -853,8 +891,8 @@ export function initApp() {
     // Cambio aereo: azzera la rotta tracciata del precedente
     // (clearRouteLine azzera gia currentRoute)
     if (cambiatoAereo) clearRouteLine();
-    document.getElementById('board').classList.remove('open');
-    document.getElementById('settings').classList.remove('open');
+    chiudiPannello('board');
+    chiudiPannello('settings');
     updateTag(ac);
     updateFollowBtn(); // stato campanella per l'aereo appena selezionato
     // Carica la rotta subito (serve all'etichetta per partenza->destinazione)
@@ -958,8 +996,7 @@ export function initApp() {
         var hex = this.getAttribute('data-hex');
         for (var m = 0; m < lastAircraft.length; m++) {
           if (lastAircraft[m].hex === hex) {
-            document.getElementById('board').classList.remove('open');
-            pickAndClose(lastAircraft[m]);
+            vaiAllAereo(lastAircraft[m], { chiudi: 'board' });
             return;
           }
         }
@@ -1147,20 +1184,8 @@ export function initApp() {
   }
 
   function passPickAndClose(ac) {
-    document.getElementById('passes').classList.remove('open');
     clearPassProjections();
-    // L'aereo puo essere fuori dal raggio della mappa (scansione ampia): in
-    // quel caso lo aggancio come marker di ricerca, cosi il polling non lo
-    // deseleziona (stesso meccanismo della ricerca globale per numero volo).
-    var inRange = lastAircraft.some(function (a) { return a.hex === ac.hex; });
-    if (!inRange && ac.lat != null) {
-      clearSearchMarker();
-      searchMarker = L.marker([ac.lat, ac.lon], { icon: planeIcon(ac.track, '#ffb454', true) }).addTo(map);
-      searchMarker._ac = ac;
-      searchMarker.on('click', function (e) { L.DomEvent.stopPropagation(e); openSheet(this._ac); });
-    }
-    if (ac.lat != null) map.setView([ac.lat, ac.lon], 9, { animate: true });
-    openSheet(ac);
+    vaiAllAereo(ac, { chiudi: 'passes' });
   }
 
   // Proiezioni sulla mappa: linea posizione attuale -> punto di passaggio + crocetta
@@ -1294,7 +1319,7 @@ export function initApp() {
       info_format: 'application/json', feature_count: 1,
       time: wmsTimeRange(FIRE_WMS.hotspots.days)
     });
-    fetch(FIRE_WMS.url + '?' + params.toString())
+    fetchConScadenza(FIRE_WMS.url + '?' + params.toString())
       .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
       .then(function (data) {
         if (seq !== fireCheckSeq[hex]) return; // risposta superata da una piu recente
@@ -1744,9 +1769,7 @@ export function initApp() {
 
   // ---------- Ricerca live tra gli aerei nel raggio ----------
   function pickAndClose(ac) {
-    document.getElementById('searchPanel').classList.remove('open');
-    map.setView([ac.lat, ac.lon], 9, { animate: true });
-    openSheet(ac);
+    vaiAllAereo(ac, { chiudi: 'searchPanel' });
   }
   function renderSearchResults() {
     var q = document.getElementById('flightSearch').value.trim().toUpperCase();
@@ -1834,18 +1857,7 @@ export function initApp() {
       }
       var ac = list[0];
       note.textContent = '';
-      clearSearchMarker();
-      if (!markers[ac.hex]) {
-        searchMarker = L.marker([ac.lat, ac.lon], {
-          icon: planeIcon(ac.track, '#ffb454', true)
-        }).addTo(map);
-        searchMarker._ac = ac;
-        searchMarker.on('click', function (e) { L.DomEvent.stopPropagation(e); openSheet(this._ac); });
-      }
-      document.getElementById('searchPanel').classList.remove('open');
-      map.setView([ac.lat, ac.lon], 8, { animate: true });
-      openSheet(ac);
-      openFull();
+      vaiAllAereo(ac, { chiudi: 'searchPanel', zoom: 8, full: true });
     } catch (e) {
       // Il difetto corretto qui: se la fonte rifiutava, l'app diceva "volo non
       // in volo" invece del vero motivo. Ora riporta cosa ha risposto.
@@ -1884,12 +1896,12 @@ export function initApp() {
     savePrefs(buildPrefs());
     refreshPasses();
     updateHudFilters();
-    document.getElementById('settings').classList.remove('open');
+    chiudiPannello('settings');
     if (radiusChanged) {
       drawRings();
       positionSweep();
       // Ricentra solo se il raggio e cambiato, per non perdere la vista corrente
-      map.setView(CENTER, radiusNM > 180 ? 7 : radiusNM > 90 ? 8 : radiusNM > 40 ? 9 : 10);
+      map.setView(CENTER, zoomPerRaggio(radiusNM));
     }
     fetchPlanes();
   });
@@ -1898,7 +1910,7 @@ export function initApp() {
   function applyCenter(recenter) {
     drawRings();
     positionSweep();
-    if (recenter) map.setView(CENTER, radiusNM > 180 ? 7 : radiusNM > 90 ? 8 : radiusNM > 40 ? 9 : 10);
+    if (recenter) map.setView(CENTER, zoomPerRaggio(radiusNM));
     fetchPlanes();
   }
 
