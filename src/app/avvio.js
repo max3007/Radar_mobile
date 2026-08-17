@@ -29,6 +29,8 @@ import { creaCache } from '../infra/cache.js';
 import { creaStato, applicaPreferenze, preferenzeDa, aereoConHex } from './contesto.js';
 import { creaSeguiti } from '../funzioni/seguiti.js';
 import { creaVerificaIncendi } from '../servizi/incendi.js';
+import { creaInArrivo } from '../funzioni/inarrivo.js';
+import { creaTraffico } from '../funzioni/traffico.js';
 import AIRPORTS from '../data/airports.json';
 
 export function initApp() {
@@ -90,7 +92,7 @@ export function initApp() {
     renderLocations();          // chip delle postazioni
     refreshBoard();             // lista aerei + classifica compagnie
     renderSearchResults();      // risultati della ricerca
-    if (isPassesOpen()) renderPasses();
+    inArrivo.ridisegna();
     if (stato.aereoSelezionato) {
       updateTag(stato.aereoSelezionato);
       if (document.getElementById('sheet').classList.contains('full')) fillSheet(stato.aereoSelezionato);
@@ -465,11 +467,7 @@ export function initApp() {
   // onApri: cosa fare in piu nel momento in cui si apre.
   var PANNELLI = {
     board: { onApri: function () { refreshBoard(); } },
-    passes: { onApri: function () {
-      document.getElementById('passList').innerHTML =
-        '<div class="empty">' + t('arr.scanning') + '</div>';
-      fetchPassScan();  // legge a 250 NM, poi popola tabella e proiezioni
-    } },
+    passes: { onApri: function () { inArrivo.apri(); } },
     settings: { onApri: null },
     searchPanel: { onApri: function () {
       document.getElementById('searchNote').textContent = '';
@@ -681,84 +679,14 @@ export function initApp() {
   // ---------- Pannello TRAFFICO: lista aerei + classifica compagnie ----------
   function isBoardOpen() { return pannelloAperto('board'); }
 
-  // Classifica compagnie (tab COMPAGNIE)
-  function renderBoard() {
-    var counts = {};
-    var filtered = stato.aerei.filter(passesFilters);
-    for (var i = 0; i < filtered.length; i++) {
-      var n = airlineName(filtered[i].flight);
-      counts[n] = (counts[n] || 0) + 1;
-    }
-    var list = Object.keys(counts).map(function (k) { return { name: k, n: counts[k] }; })
-      .sort(function (a, b) { return b.n - a.n; });
-    var max = list.length ? list[0].n : 1;
-    var html = '';
-    for (var j = 0; j < list.length; j++) {
-      html += '<div class="row"><div class="name">' + list[j].name + '</div>' +
-        '<div class="barWrap"><div class="bar" style="width:' + Math.round(list[j].n / max * 100) + '%"></div></div>' +
-        '<div class="n">' + list[j].n + '</div></div>';
-    }
-    document.getElementById('boardList').innerHTML = html || '<div class="row"><div class="name">' + t('board.none') + '</div></div>';
-  }
-
-  // Lista aerei nel raggio (tab AEREI): rispetta i filtri, ordinata per
-  // distanza, righe cliccabili che portano all'aereo.
-  function renderPlaneList() {
-    var list = stato.aerei.filter(function (a) { return a.lat != null && a.lon != null && passesFilters(a); });
-    list = list.map(function (a) { return { ac: a, d: map.distance([a.lat, a.lon], stato.centro) }; })
-      .sort(function (x, y) { return x.d - y.d; });
-    document.getElementById('planeCount').textContent =
-      list.length ? t(list.length === 1 ? 'list.count1' : 'list.count', { n: list.length }) : '';
-    if (!list.length) {
-      document.getElementById('planeList').innerHTML = '<div class="empty">' + t('list.none') + '</div>';
-      return;
-    }
-    var html = '';
-    for (var i = 0; i < list.length; i++) {
-      var a = list[i].ac, km = list[i].d / 1000;
-      var flight = esc((a.flight || '').trim() || a.hex.toUpperCase());
-      var alt = altLabel(a, true) || '--';
-      var spd = a.gs != null ? Math.round(a.gs) + ' kt' : '--';
-      var emg = !!emergencyInfo(a);
-      var phase = flightPhase(a) || '';
-      var ff = isFirefightingAircraft(a);
-      var ffBadge = ff ? ('<span class="ffbadge">' + (incendiVicini.vicino(a.hex) ? '🔥 ' + t('ff.nearFire') : t('ff.badge')) + '</span>') : '';
-      html += '<div class="acrow' + (emg ? ' emg' : '') + (ff ? ' ff' : '') + '" data-hex="' + esc(a.hex) + '">' +
-        '<div class="ac-l"><div class="ac-f">' + flight + (emg ? '<span class="emgbadge">' + t('emg.badge') + '</span>' : '') + ffBadge + '</div>' +
-          '<div class="ac-sub">' + esc(airlineName(a.flight)) + (a.t ? ' · ' + esc(a.t) : '') + (phase ? ' · ' + esc(phase) : '') + '</div></div>' +
-        '<div class="ac-r"><div class="ac-alt">' + alt + ' · ' + spd + '</div>' +
-          '<div class="ac-dist">' + km.toFixed(0) + ' km ' + compass(bearingFromCenter(stato.centro, a.lat, a.lon)) + '</div></div>' +
-        '</div>';
-    }
-    document.getElementById('planeList').innerHTML = html;
-  }
-
-  // Aggiorna le viste del pannello TRAFFICO (solo se aperto, e solo la scheda
-  // che si sta guardando). Ridisegnare anche quella nascosta era lavoro
-  // buttato: succedeva a ogni giro di polling, cioe ogni 6 secondi.
-  function schedaBoardVisibile() {
-    return document.getElementById('tabAirlines').style.display === 'block'
-      ? 'airlines' : 'planes';
-  }
-  function refreshBoard() {
-    if (!isBoardOpen()) return;
-    if (schedaBoardVisibile() === 'airlines') renderBoard();
-    else renderPlaneList();
-  }
-
-  // Tab AEREI / COMPAGNIE
-  (function () {
-    var tabs = document.querySelectorAll('#board .tabs .tab');
-    for (var i = 0; i < tabs.length; i++) {
-      tabs[i].addEventListener('click', function () {
-        var which = this.getAttribute('data-tab');
-        for (var j = 0; j < tabs.length; j++) tabs[j].classList.toggle('active', tabs[j] === this);
-        document.getElementById('tabPlanes').style.display = which === 'planes' ? 'block' : 'none';
-        document.getElementById('tabAirlines').style.display = which === 'airlines' ? 'block' : 'none';
-        refreshBoard();   // la scheda appena scoperta va popolata subito
-      });
-    }
-  })();
+  // Le due schede stanno in funzioni/traffico.js; qui resta il filo.
+  var traffico = creaTraffico({
+    stato: stato,
+    passaFiltri: passesFilters,
+    aperto: isBoardOpen,
+    vicinoAIncendio: function (hex) { return incendiVicini.vicino(hex); }
+  });
+  function refreshBoard() { traffico.aggiorna(); }
 
   // ---------- Filtro compagnia (nel pannello ricerca, applicazione immediata) ----------
   function airlinesPresent() {
@@ -810,133 +738,29 @@ export function initApp() {
     return best;
   }
 
-  // ---------- IN ARRIVO: passaggi previsti (CPA) ----------
-  var passLayer = null;      // proiezioni sulla mappa (linea + crocetta)
-  var passScanSeq = 0;       // scarta risposte fuori ordine della scansione
+  // ---------- IN ARRIVO: passaggi previsti ----------
+  // La funzionalita sta in funzioni/inarrivo.js; qui restano i fili.
   function isPassesOpen() { return pannelloAperto('passes'); }
-
-  // Calcola e ordina i passaggi entro soglia e orizzonte temporale.
-  // Usa il set della scansione ampia (250 NM), cosi vede gli aerei molto
-  // prima del raggio della mappa.
-  function computePasses() {
-    var out = [];
-    var filtered = stato.aereiScansione.filter(passesFilters);
-    for (var i = 0; i < filtered.length; i++) {
-      var ac = filtered[i];
-      var pass = nextPass(stato.centro, ac);
-      if (!pass) continue;
-      if (pass.tMin > PASS_HORIZON_MIN) continue;
-      if (pass.dMinKm > stato.passKm) continue;
-      // Scarta i falsi positivi: aerei che atterrano a un aeroporto sulla
-      // rotta prima di arrivare sopra di noi (es. arrivi a Fiumicino).
-      if (landingBeforePass(stato.centro, ac, pass, AIRPORTS)) continue;
-      out.push({ ac: ac, pass: pass });
-    }
-    out.sort(function (a, b) { return a.pass.tMin - b.pass.tMin; });
-    return out;
-  }
-
-  // Scansione dedicata a raggio massimo (solo a pannello aperto): estende il
-  // preaviso senza toccare il raggio della mappa. Rinfrescata a ogni polling.
-  // Vero quando la scansione ampia non e riuscita e stiamo mostrando solo gli
-  // aerei del raggio corrente. Prima il ripiego era muto: la lista diceva di
-  // essere una scansione a 250 NM mentre mostrava i dati di 40 NM.
-  var passScanRidotta = false;
-  async function fetchPassScan() {
-    if (!isPassesOpen()) return;
-    var seq = ++passScanSeq;
-    try {
-      var data = await chiediVoli(SRC.point(stato.centro[0], stato.centro[1], PASS_SCAN_NM));
-      if (seq !== passScanSeq || !isPassesOpen()) return;
-      stato.aereiScansione = tagliaAlRaggio(data.ac || [], PASS_SCAN_NM);
-      passScanRidotta = false;
-    } catch (e) {
-      if (seq !== passScanSeq) return;
-      stato.aereiScansione = stato.aerei;  // ripiego sul set nel raggio corrente
-      passScanRidotta = true;       // e lo diciamo, invece di far finta di niente
-    }
-    if (!isPassesOpen()) return;
-    // Tabella e proiezioni sulla mappa mostrano la STESSA lista: calcolarla
-    // due volte non era solo spreco, era il modo di farle divergere se un
-    // aereo si muoveva tra un calcolo e l'altro.
-    var passaggi = computePasses();
-    renderPasses(passaggi);
-    drawPassProjections(passaggi);
-  }
-
   function passFlightLabel(ac) {
     var cs = (ac.flight || '').trim();
     var r = cs ? routeCache.get(cs) : null;
-    if (r) {
-      var num = fmtFlight(r.flightIata);
-      if (num) return num;
-    }
-    return cs || ac.hex.toUpperCase();
+    var num = r ? fmtFlight(r.flightIata) : null;
+    return num || cs || ac.hex.toUpperCase();
   }
-
-  function renderPasses(passaggi) {
-    var box = document.getElementById('passList');
-    var list = passaggi || computePasses();
-    // Se la scansione ampia non e riuscita lo si dice: mostrare i dati del
-    // raggio corrente spacciandoli per una scansione a 250 NM e peggio che
-    // non mostrarli.
-    var avviso = passScanRidotta
-      ? '<div class="empty">' + t('arr.reduced', { nm: stato.raggio }) + '</div>' : '';
-    if (!list.length) {
-      box.innerHTML = avviso + '<div class="empty">' + t('arr.none', { n: PASS_HORIZON_MIN }) + '</div>';
-      return;
-    }
-    var now = Date.now();
-    var html = '';
-    for (var i = 0; i < list.length; i++) {
-      var ac = list[i].ac, p = list[i].pass;
-      var mins = Math.max(0, Math.round(p.tMin));
-      var when = new Date(now + p.tMin * 60000);
-      var hh = ('0' + when.getHours()).slice(-2) + ':' + ('0' + when.getMinutes()).slice(-2);
-      var etaBig = mins <= 0 ? t('arr.now') : t('arr.inMin', { n: mins });
-      var km = p.dMinKm < 1 ? (Math.round(p.dMinKm * 1000) + ' m') : (p.dMinKm.toFixed(p.dMinKm < 10 ? 1 : 0) + ' km');
-      var overhead = (p.dMinKm < PASS_OVERHEAD_KM);
-      html += '<div class="pr" data-hex="' + esc(ac.hex) + '">' +
-        '<div class="eta"><b>' + etaBig + '</b><span>' + hh + '</span></div>' +
-        '<div class="info"><div class="f">' + esc(passFlightLabel(ac)) + '</div>' +
-          '<small>' + esc(airlineName(ac.flight)) + (ac.t ? ' · ' + esc(ac.t) : '') + '</small>' +
-          (overhead ? '<span class="badge">' + t('arr.overhead') + '</span>' : '') + '</div>' +
-        '<div class="geo">' + km + '<small>' + t('arr.towards', { elev: p.elevAtPass, dir: compass(p.brgAtPass) }) + '</small></div>' +
-        '</div>';
-    }
-    box.innerHTML = avviso + html;
-  }
-
-  function passPickAndClose(ac) {
-    clearPassProjections();
-    vaiAllAereo(ac, { chiudi: 'passes' });
-  }
-
-  // Proiezioni sulla mappa: linea posizione attuale -> punto di passaggio + crocetta
-  function clearPassProjections() {
-    if (passLayer) { map.removeLayer(passLayer); passLayer = null; }
-  }
-  function drawPassProjections(passaggi) {
-    clearPassProjections();
-    var list = passaggi || computePasses();
-    if (!list.length) return;
-    passLayer = L.layerGroup();
-    for (var i = 0; i < list.length; i++) {
-      var ac = list[i].ac, p = list[i].pass;
-      L.polyline([[ac.lat, ac.lon], [p.passLat, p.passLon]], {
-        color: '#6fd3ff', weight: 1.2, opacity: 0.5, dashArray: '4,6', interactive: false
-      }).addTo(passLayer);
-      L.marker([p.passLat, p.passLon], {
-        icon: iconaPuntoPassaggio(),
-        interactive: false, keyboard: false
-      }).addTo(passLayer);
-    }
-    passLayer.addTo(map);
-  }
-  function refreshPasses() {
-    if (!isPassesOpen()) return;
-    fetchPassScan(); // rinfresca il set ampio, poi ridisegna
-  }
+  var inArrivo = creaInArrivo({
+    stato: stato,
+    mappa: map,
+    aeroporti: AIRPORTS,
+    chiediVoli: chiediVoli,
+    urlPunto: function (lat, lon, nm) { return SRC.point(lat, lon, nm); },
+    tagliaAlRaggio: tagliaAlRaggio,
+    passaFiltri: passesFilters,
+    aperto: isPassesOpen,
+    vaiAllAereo: vaiAllAereo,
+    etichettaVolo: passFlightLabel
+  });
+  function refreshPasses() { inArrivo.aggiorna(); }
+  function clearPassProjections() { inArrivo.pulisciProiezioni(); }
 
   // ---------- Aerei seguiti + Canadair vicino a un incendio ----------
   // Due funzionalita staccate: qui restano solo i fili che le legano al resto.
@@ -1648,8 +1472,9 @@ export function initApp() {
     }));
   delega(document.getElementById('searchResults'), '.sr',
     perHex(function () { return stato.aerei; }, pickAndClose));
-  delega(document.getElementById('passList'), '.pr',
-    perHex(function () { return stato.aereiScansione; }, passPickAndClose));
+  delega(document.getElementById('passList'), '.pr', function (riga) {
+    inArrivo.scegli(riga.getAttribute('data-hex'));
+  });
   delega(document.getElementById('airlineList'), '.opt', function (riga) {
     applyAirlineFilter(riga.getAttribute('data-name'));
     document.getElementById('airlineList').style.display = 'none';
