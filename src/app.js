@@ -21,6 +21,7 @@ import { creaBanner } from './banner.js';
 import {
   iconaAereo, iconaOsservatore, iconaAeroporto, iconaPuntoPassaggio, iconaEtichetta
 } from './icone.js';
+import { creaMira } from './mira.js';
 import AIRPORTS from './data/airports.json';
 
 var CENTER = DEFAULT_CENTER.slice(); // puo cambiare con la geolocalizzazione
@@ -284,151 +285,17 @@ export function initApp() {
   }
 
   // ---------- Bussola live: punta il telefono verso l'aereo selezionato ----------
-  var miraActive = false;
-  var miraHandler = null;
-  function miraTargetBearing() {
-    if (!selectedAc || selectedAc.lat == null) return null;
-    return bearingFromCenter(CENTER, selectedAc.lat, selectedAc.lon);
-  }
-  // Elevazione dell'aereo selezionato (gradi sopra l'orizzonte)
-  function miraTargetElevation() {
-    if (!selectedAc || selectedAc.lat == null) return null;
-    return elevationAngle(CENTER, selectedAc.lat, selectedAc.lon, selectedAc.alt_baro);
-  }
-  function updateMiraStatic() {
-    // Stato iniziale della riga elevazione, prima che arrivino i sensori
-    var elev = miraTargetElevation();
-    document.getElementById('miraSub').textContent = t('mira.elevOf', { v: (elev == null ? '--' : elev + '\u00B0') });
-  }
-  // Smoothing: componenti circolari per l'azimut (salto 359->0) + EMA per il pitch
-  var smoothSin = null, smoothCos = null, smoothBeta = null;
-  var SMOOTH = 0.15;       // 0..1: piu basso = piu stabile ma piu lento
-  // Riferimento di pitch che corrisponde all'orizzonte (0\u00B0 elevazione).
-  // Default 90\u00B0: telefono tenuto verticale. La calibrazione lo azzera sul reale.
-  var betaHorizon = 90;
-  var lastBeta = null;     // ultimo pitch grezzo, per il pulsante CALIBRA
-  var LOCK_IN = 8;         // entra in allineamento sotto questa differenza
-  var LOCK_OUT = 15;       // esce solo oltre questa (isteresi anti-tremolio)
-  var SCALE_DEG = 60;      // gradi visibili dal centro al bordo del mirino
-  var miraLocked = false;  // stato di allineamento corrente
-
-  function onOrientation(e) {
-    // --- Asse orizzontale: rotazione (bussola) ---
-    var heading = null;
-    if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
-    else if (e.alpha != null) heading = 360 - e.alpha; // Android: alpha antiorario da Nord
-    if (heading == null) return;
-    var rad = heading * Math.PI / 180;
-    if (smoothSin == null) { smoothSin = Math.sin(rad); smoothCos = Math.cos(rad); }
-    else {
-      smoothSin = smoothSin * (1 - SMOOTH) + Math.sin(rad) * SMOOTH;
-      smoothCos = smoothCos * (1 - SMOOTH) + Math.cos(rad) * SMOOTH;
-    }
-    var smoothed = (Math.atan2(smoothSin, smoothCos) * 180 / Math.PI + 360) % 360;
-
-    var tgtBrg = miraTargetBearing();
-    if (tgtBrg == null) return;
-    var diffAz = ((tgtBrg - smoothed + 540) % 360) - 180; // -180..180
-
-    // --- Asse verticale: alzata (inclinazione del telefono) ---
-    var hasPitch = (e.beta != null);
-    var diffEl = null;
-    if (hasPitch) {
-      lastBeta = e.beta;
-      if (smoothBeta == null) smoothBeta = e.beta;
-      else smoothBeta = smoothBeta * (1 - SMOOTH) + e.beta * SMOOTH;
-      // Elevazione a cui punta il telefono: verticale (betaHorizon) = orizzonte
-      var pointElev = betaHorizon - smoothBeta;
-      var tgtEl = miraTargetElevation();
-      if (tgtEl != null) diffEl = tgtEl - pointElev; // >0 = aereo piu in alto -> alza
-    }
-
-    var target = document.getElementById('miraTarget');
-    var status = document.getElementById('miraStatus');
-    var sub = document.getElementById('miraSub');
-    var locked = document.getElementById('miraLocked');
-    var adA = Math.abs(diffAz);
-    var adE = hasPitch ? Math.abs(diffEl) : 0;
-
-    // Lock con isteresi: entra sotto LOCK_IN, esce solo oltre LOCK_OUT.
-    // Cosi sul bordo della soglia non alterna piu tra allineato e non.
-    var maxDiff = Math.max(adA, adE);
-    if (!miraLocked && maxDiff < LOCK_IN) miraLocked = true;
-    else if (miraLocked && maxDiff > LOCK_OUT) miraLocked = false;
-
-    // Due righe SEMPRE presenti e su singola riga (rotazione sopra, elevazione
-    // sotto): l'altezza del blocco non cambia mai, quindi il mirino non trasla.
-    if (miraLocked) {
-      target.style.left = '50%';   // fermo al centro: niente micro-rumore
-      target.style.top = '50%';
-      status.textContent = t('mira.aligned');
-      sub.textContent = t('mira.framed');
-      locked.style.display = 'block';
-    } else {
-      var clamp = function (v) { return Math.max(-45, Math.min(45, v / SCALE_DEG * 45)); };
-      target.style.left = (50 + clamp(diffAz)) + '%';
-      target.style.top = (hasPitch ? (50 - clamp(diffEl)) : 50) + '%';
-      locked.style.display = 'none';
-      // Riga 1: rotazione (sempre)
-      status.textContent = adA < LOCK_IN ? t('mira.rotOk')
-        : t(diffAz > 0 ? 'mira.right' : 'mira.left', { n: Math.round(adA) });
-      // Riga 2: elevazione (sempre sotto)
-      if (!hasPitch) {
-        var te = miraTargetElevation();
-        sub.textContent = t('mira.elevOf', { v: (te == null ? '--' : te + '\u00B0') });
-      } else {
-        sub.textContent = adE < LOCK_IN ? t('mira.elevOk')
-          : t(diffEl > 0 ? 'mira.up' : 'mira.down', { n: Math.round(adE) });
-      }
-    }
-  }
-  function startMira() {
-    if (!selectedAc) return;
-    // Reset del filtro: riparte pulito
-    smoothSin = null; smoothCos = null; smoothBeta = null; miraLocked = false;
-    var overlay = document.getElementById('miraOverlay');
-    var hint = document.getElementById('miraHint');
-    overlay.style.display = 'block';
-    updateMiraStatic();
-    document.getElementById('miraStatus').textContent = t('mira.move');
-    function attach() {
-      miraActive = true;
-      miraHandler = onOrientation;
-      window.addEventListener('deviceorientationabsolute', miraHandler, true);
-      window.addEventListener('deviceorientation', miraHandler, true);
-      hint.textContent = t('mira.compassHint');
-    }
-    // iOS 13+: serve permesso esplicito
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      DeviceOrientationEvent.requestPermission().then(function (resp) {
-        if (resp === 'granted') attach();
-        else hint.textContent = t('mira.permDenied');
-      }).catch(function () { hint.textContent = t('mira.unavailable'); });
-    } else if (window.DeviceOrientationEvent) {
-      attach();
-    } else {
-      hint.textContent = t('mira.unsupported');
-    }
-  }
-  function stopMira() {
-    miraActive = false;
-    document.getElementById('miraOverlay').style.display = 'none';
-    if (miraHandler) {
-      window.removeEventListener('deviceorientationabsolute', miraHandler, true);
-      window.removeEventListener('deviceorientation', miraHandler, true);
-      miraHandler = null;
-    }
-  }
-  // Calibrazione orizzonte: l'inclinazione attuale del telefono diventa lo 0°
-  // di elevazione. Da usare tenendo il telefono verticale puntato all'orizzonte.
+  // Sensori, filtro e isteresi stanno in src/mira.js. Qui restano solo i due
+  // collegamenti con l'app: da dove si guarda e quale aereo si sta seguendo.
+  var mira = creaMira({
+    getCentro: function () { return CENTER; },
+    getAereo: function () { return selectedAc; }
+  });
+  function startMira() { mira.start(); }
+  function stopMira() { mira.stop(); }
   document.getElementById('miraCalib').addEventListener('click', function (e) {
     e.stopPropagation();
-    if (lastBeta == null) {
-      document.getElementById('miraHint').textContent = t('mira.moveFirst');
-      return;
-    }
-    betaHorizon = lastBeta;
-    document.getElementById('miraHint').textContent = t('mira.calibrated');
+    mira.calibra();
   });
 
   // Livello di zoom che fa entrare nello schermo l'anello piu esterno.
@@ -1453,7 +1320,7 @@ export function initApp() {
           if (lastAircraft[i].hex === selected) {
             selectedAc = lastAircraft[i];
             updateTag(lastAircraft[i]); // etichetta ancorata segue l'aereo
-            if (miraActive) updateMiraStatic(); // aggiorna direzione/elevazione live
+            mira.aggiornaBersaglio(); // direzione/elevazione seguono l'aereo
             // Aggiorna la scheda full solo se e aperta
             if (document.getElementById('sheet').classList.contains('full')) fillSheet(lastAircraft[i]);
             found = true; break;
@@ -1600,7 +1467,7 @@ export function initApp() {
 
   // MIRA: bussola live sulla mappa verso l'aereo selezionato
   document.getElementById('btnMira').addEventListener('click', function () {
-    if (miraActive) { stopMira(); return; } // secondo tap: spegne
+    if (mira.attiva()) { stopMira(); return; } // secondo tap: spegne
     if (!selectedAc) {
       // Nessun aereo selezionato: usa il piu vicino
       var ac = nearestAircraft();
