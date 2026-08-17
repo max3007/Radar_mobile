@@ -313,69 +313,95 @@
       .observer .obs-ping { animation: none; opacity: 0; }
     }
 
-    /* MIRA — cerchio fermo + freccia esterna che indica dove girarsi.
+    /* MIRA — cerchio fermo, aereo bersaglio da portarci dentro.
        Il cerchio e dove stai guardando adesso e NON si muove mai: e il
-       riferimento. Si muove la freccia, che sta fuori dal cerchio e ruota.
-       Cosi la guida resta leggibile a qualunque scarto angolare, anche con
-       l'aereo dietro le spalle — cosa che il vecchio bersaglio mobile non
-       faceva, perche oltre i 60 gradi restava appiccicato al bordo. */
+       riferimento; si muove l'aereo, che ha il muso rivolto dove devi
+       girarti. Un elemento solo: dice dove sta il bersaglio, quanto e lontano
+       e da che parte andare. Il compito e portarlo dentro al cerchio — non al
+       centro esatto, perche a occhio nudo quella precisione non serve. */
     #miraBox {
-      position: relative; width: min(280px, 82vw); aspect-ratio: 1 / 1; margin: 0 auto;
+      position: relative; width: min(300px, 86vw); aspect-ratio: 1 / 1; margin: 0 auto;
+    }
+    /* Lo strumento si sovrappone a basemap chiare e scure: senza un fondo
+       proprio il reticolo sparisce sul satellite e sul rilievo. Sfumato ai
+       bordi cosi non sembra una finestra incollata sopra la mappa. */
+    #miraBox .mira-fondo {
+      position: absolute; inset: -14%; border-radius: 50%; pointer-events: none;
+      background: radial-gradient(circle at 50% 50%,
+        rgba(6,10,14,0.62) 0%, rgba(6,10,14,0.52) 52%,
+        rgba(6,10,14,0.22) 74%, rgba(6,10,14,0) 100%);
     }
     #miraBox .mira-cerchio {
       position: absolute; left: 50%; top: 50%; width: 68%; aspect-ratio: 1 / 1;
       transform: translate(-50%, -50%); border-radius: 50%;
-      border: 5px solid rgba(207,232,218,0.34);
-      background: rgba(6,10,14,0.16);
-      box-shadow: 0 0 18px rgba(0,0,0,0.45);
-      display: flex; align-items: center; justify-content: center;
+      border: 3px solid rgba(242,255,248,0.7);
+      box-shadow: 0 0 0 1px rgba(6,10,14,0.55), 0 0 0 1px rgba(6,10,14,0.55) inset;
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
-    /* Crocino al centro: dice esattamente dove sta puntando il telefono */
-    #miraBox .mira-mirino {
-      position: absolute; width: 16px; height: 16px; opacity: 0.5;
-      background:
-        linear-gradient(var(--text), var(--text)) center/1px 100% no-repeat,
-        linear-gradient(var(--text), var(--text)) center/100% 1px no-repeat;
+    /* Il bersaglio da portare dentro al cerchio. La transizione e breve:
+       serve a smussare il rumore dei sensori, non a inseguire con ritardo. */
+    #miraBox .mira-aereo {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      transition: left 0.14s linear, top 0.14s linear, transform 0.14s linear;
+      line-height: 0; pointer-events: none;
     }
-    /* I gradi stanno in basso a destra e non al centro: al centro finiscono
-       sotto l'etichetta ancorata dell'aereo, che e centrata anche lei. */
+    #miraBox .mira-aereo svg { fill: var(--amber); filter: drop-shadow(0 0 7px rgba(6,10,14,0.9)); }
+    /* I gradi stanno sotto il cerchio: dentro finirebbero sull'aereo o
+       sull'etichetta, che gravitano entrambi al centro. */
     #miraBox .mira-gradi {
-      position: absolute; right: 12%; bottom: 12%;
-      font-family: var(--mono); font-size: 27px; font-weight: 700;
-      color: var(--text); letter-spacing: -1px;
-      padding: 1px 7px; border-radius: 6px;
-      background: rgba(6,10,14,0.7);
-      text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+      position: absolute; left: 50%; bottom: 1%; transform: translateX(-50%);
+      font-family: var(--mono); font-size: 26px; font-weight: 700;
+      font-variant-numeric: tabular-nums; letter-spacing: -1px;
+      color: var(--white); text-shadow: 0 1px 8px rgba(6,10,14,1);
     }
-    /* Il wrapper ruota attorno al centro del box; la punta sta in cima,
-       quindi finisce sempre appena fuori dal cerchio nella direzione giusta. */
-    #miraBox .mira-freccia {
-      position: absolute; inset: 0; transform-origin: 50% 50%;
-      transition: transform 0.14s linear, opacity 0.2s ease;
-      pointer-events: none;
-    }
-    /* Appoggiata al bordo del cerchio, con la punta verso l'esterno: e la
-       direzione in cui devi girarti, non un indicatore astratto. */
-    #miraBox .mira-punta {
-      position: absolute; left: 50%; top: 2px; width: 34px; height: 46px;
-      margin-left: -17px;
-      background: var(--amber);
-      clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%);
-      filter: drop-shadow(0 0 9px rgba(255,180,84,0.7));
-    }
-    /* Agganciato: il cerchio si accende e la freccia sparisce — indicare una
-       direzione quando ci sei gia confonde invece di aiutare. */
+    /* L'aereo e ENTRATO nel cerchio: ce l'hai in vista. Il cerchio si accende
+       in verde e l'aereo si raddrizza — non c'e piu nessuna direzione da
+       prendere. Non serve la centratura perfetta. */
     #miraBox.agganciato .mira-cerchio {
       border-color: var(--phosphor);
-      box-shadow: 0 0 26px rgba(52,224,138,0.55), 0 0 14px rgba(52,224,138,0.4) inset;
-      animation: blink 1.1s infinite;
+      box-shadow: 0 0 0 1px rgba(6,10,14,0.55),
+                  0 0 30px rgba(52,224,138,0.5), 0 0 18px rgba(52,224,138,0.35) inset;
     }
-    #miraBox.agganciato .mira-freccia { opacity: 0; }
-    #miraBox.agganciato .mira-gradi { color: var(--phosphor); opacity: 1; }
+    #miraBox.agganciato .mira-gradi { color: var(--phosphor); }
+    #miraBox.agganciato .mira-aereo svg { fill: var(--phosphor); }
+    /* Finche i sensori non rispondono non sappiamo dove sia l'aereo: si
+       dichiara nascondendo il bersaglio, invece di disegnarlo al centro come
+       se fossimo gia allineati. */
+    #miraBox.in-attesa .mira-aereo { opacity: 0; }
+    #miraBox.in-attesa .mira-cerchio { border-color: rgba(242,255,248,0.34); }
+
+    /* Calibrazione: icona sola. E un comando raro, non deve competere col
+       reticolo. L'icona e un orizzonte con il punto di mira sopra. */
+    .mira-calib {
+      margin-top: 14px; width: 42px; height: 42px; border-radius: 50%;
+      background: rgba(6,10,14,0.78); border: 1px solid var(--line);
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; padding: 0;
+    }
+    .mira-calib:active { transform: scale(0.94); }
+    .mira-calib-ico {
+      display: block; width: 18px; height: 18px; position: relative;
+    }
+    .mira-calib-ico::before {
+      content: ""; position: absolute; left: 0; right: 0; top: 62%;
+      height: 2px; background: var(--phosphor); border-radius: 1px;
+    }
+    .mira-calib-ico::after {
+      content: ""; position: absolute; left: 50%; top: 14%;
+      width: 7px; height: 7px; margin-left: -3.5px;
+      border: 2px solid var(--phosphor); border-radius: 50%;
+    }
+    /* Il testo compare solo quando c'e qualcosa che l'utente deve sapere:
+       permesso negato, sensore assente, calibrazione confermata. */
+    #miraHint {
+      margin-top: 10px; font-size: 11px; color: var(--text);
+      background: rgba(6,10,14,0.82); border-radius: 6px;
+      padding: 4px 10px; display: inline-block; max-width: 100%;
+    }
+    #miraHint:empty { display: none; }
+
     @media (prefers-reduced-motion: reduce) {
-      #miraBox .mira-freccia { transition: none; }
-      #miraBox.agganciato .mira-cerchio { animation: none; }
+      #miraBox .mira-aereo { transition: none; }
     }
     /* v. il commento in funzioni/mira.js: l'etichetta ancorata e centrata
        come il mirino e ne coprirebbe i gradi. */

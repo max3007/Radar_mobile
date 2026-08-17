@@ -56,23 +56,27 @@
 
   <!-- Overlay MIRA: mirino 2D (rotazione + alzata), live coi sensori del telefono -->
   <div id="miraOverlay" style="display:none;position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);z-index:1100;text-align:center;pointer-events:auto;width:min(320px,86vw);">
-    <div id="miraBox">
-      <!-- Cerchio FERMO: dove stai guardando adesso. Non si muove mai. -->
-      <div class="mira-cerchio">
-        <div class="mira-mirino"></div>
-        <div class="mira-gradi" id="miraGradi">--</div>
+    <div id="miraBox" class="in-attesa">
+      <!-- Fondo proprio dello strumento: senza, il reticolo sparisce sulle
+           basemap chiare (satellite, rilievo). -->
+      <div class="mira-fondo"></div>
+      <!-- Cerchio FERMO: dove stai guardando adesso. Non si muove mai.
+           Portarci dentro l'aereo e tutto il compito. -->
+      <div class="mira-cerchio"></div>
+      <div class="mira-gradi" id="miraGradi">--</div>
+      <!-- Il bersaglio: si muove e punta il muso verso la direzione da
+           prendere. Va portato dentro al cerchio. -->
+      <div class="mira-aereo" id="miraAereo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="34" height="34">
+          <path d="M12 2 L14 10 L22 13 L22 15 L14 13.5 L13.5 20 L16 21.5 L16 23 L12 22 L8 23 L8 21.5 L10.5 20 L10 13.5 L2 15 L2 13 L10 10 Z"/>
+        </svg>
       </div>
-      <!-- Freccia FUORI dal cerchio: ruota per indicare da che parte girarsi.
-           Sparisce quando l'aereo e inquadrato. -->
-      <div class="mira-freccia" id="miraFreccia"><div class="mira-punta"></div></div>
     </div>
-    <div id="miraStatus" style="margin-top:10px;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--phosphor);background:rgba(6,10,14,0.8);border-radius:8px;padding:6px 12px;display:inline-block;white-space:nowrap;">--</div>
-    <div style="height:6px;"></div>
-    <div id="miraSub" style="font-size:12px;font-weight:700;color:var(--amber);background:rgba(6,10,14,0.8);border-radius:8px;padding:5px 12px;display:inline-block;white-space:nowrap;">--</div>
-    <div style="margin-top:8px;">
-      <button id="miraCalib" class="chip" data-i18n="mira.calibBtn">CALIBRA ORIZZONTE</button>
-    </div>
-    <div id="miraHint" style="margin-top:6px;font-size:9px;color:var(--muted);background:rgba(6,10,14,0.7);border-radius:6px;padding:3px 8px;display:inline-block;"></div>
+    <button id="miraCalib" class="mira-calib" data-i18n-title="mira.calibBtn"
+            data-i18n-aria="mira.calibBtn" title="Calibra orizzonte" aria-label="Calibra orizzonte">
+      <span class="mira-calib-ico" aria-hidden="true"></span>
+    </button>
+    <div id="miraHint"></div>
   </div>
 
   <!-- Finestra SOPRA DI TE: conferma quando l'aereo piu vicino e basso sull'orizzonte -->

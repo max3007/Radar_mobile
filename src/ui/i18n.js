@@ -99,11 +99,6 @@ const DICT = {
     // Quota
     'alt.ground': 'TERRA', 'alt.groundShort': 'a terra', 'alt.low': 'bassa quota',
     // MIRA
-    'mira.move': 'MUOVI IL TELEFONO…', 'mira.aligned': '✈ ALLINEATO — GUARDA LÀ!',
-    'mira.framed': 'aereo inquadrato ✓', 'mira.rotOk': '◎ rotazione ok', 'mira.elevOk': '◎ elevazione ok',
-    'mira.left': 'SINISTRA {n}°', 'mira.right': 'DESTRA {n}°', 'mira.up': 'ALZA {n}°', 'mira.down': 'ABBASSA {n}°',
-    'mira.elevOf': 'elevazione aereo {v}',
-    'mira.compassHint': 'Bussola imprecisa? Muovi il telefono a otto',
     'mira.permDenied': 'Permesso bussola negato', 'mira.unavailable': 'Bussola non disponibile',
     'mira.unsupported': 'Bussola non supportata su questo dispositivo',
     'mira.calibrated': 'Orizzonte calibrato ✓', 'mira.moveFirst': 'Muovi prima il telefono per attivare i sensori',
@@ -127,7 +122,7 @@ const DICT = {
     'follow.on': 'Avviso attivo: tocca per togliere', 'follow.off': 'Avvisami quando passa vicino',
     // Dialoghi / MIRA box / lingua
     'dlg.delete': 'ELIMINA', 'dlg.cancel': 'ANNULLA', 'above.showAnyway': 'MOSTRA COMUNQUE',
-    'mira.calibBtn': 'CALIBRA ORIZZONTE',
+    'mira.calibBtn': 'Calibra orizzonte',
     // Errori generici
     'err.leaflet': 'Errore: Leaflet non caricato (serve connessione)',
     'geo.unavailable': 'Geolocalizzazione non disponibile:'
@@ -213,11 +208,6 @@ const DICT = {
     'em.generalShort': 'EMERGENCY', 'em.medical': 'MEDICAL FLIGHT', 'em.minfuel': 'MINIMUM FUEL',
     'em.unlawful': 'UNLAWFUL INTERFERENCE', 'em.downed': 'DOWNED AIRCRAFT', 'em.other': 'EMERGENCY: {e}',
     'alt.ground': 'GROUND', 'alt.groundShort': 'on ground', 'alt.low': 'low altitude',
-    'mira.move': 'MOVE THE PHONE…', 'mira.aligned': '✈ ALIGNED — LOOK THERE!',
-    'mira.framed': 'aircraft in view ✓', 'mira.rotOk': '◎ rotation ok', 'mira.elevOk': '◎ elevation ok',
-    'mira.left': 'LEFT {n}°', 'mira.right': 'RIGHT {n}°', 'mira.up': 'UP {n}°', 'mira.down': 'DOWN {n}°',
-    'mira.elevOf': 'aircraft elevation {v}',
-    'mira.compassHint': 'Compass off? Move the phone in a figure-8',
     'mira.permDenied': 'Compass permission denied', 'mira.unavailable': 'Compass unavailable',
     'mira.unsupported': 'Compass not supported on this device',
     'mira.calibrated': 'Horizon calibrated ✓', 'mira.moveFirst': 'Move the phone first to activate the sensors',
@@ -235,7 +225,7 @@ const DICT = {
     'alert.incoming': '✈ {flight} inbound · {when} · {km} · look {dir}',
     'follow.on': 'Alert on: tap to remove', 'follow.off': 'Alert me when it passes close',
     'dlg.delete': 'DELETE', 'dlg.cancel': 'CANCEL', 'above.showAnyway': 'SHOW ANYWAY',
-    'mira.calibBtn': 'CALIBRATE HORIZON',
+    'mira.calibBtn': 'Calibrate horizon',
     'err.leaflet': 'Error: Leaflet not loaded (needs connection)',
     'geo.unavailable': 'Geolocation unavailable:'
   }

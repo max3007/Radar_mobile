@@ -27,10 +27,11 @@ Funzionalità principali:
   rotta origine→destinazione, foto dell'aereo, dati tecnici); le rotte
   d'archivio incoerenti con la posizione reale vengono nascoste;
 - **MIRA**: un cerchio fermo al centro dello schermo mostra dove stai
-  guardando, una freccia fuori dal cerchio ruota per indicarti da che parte
-  girarti e al centro leggi quanti gradi mancano. Guida sia in rotazione
-  (bussola) sia in alzata (inclinazione), con calibrazione dell'orizzonte;
-  quando inquadri l'aereo il cerchio si accende e la freccia sparisce;
+  guardando; la sagoma dell'aereo si muove e punta il muso verso la direzione
+  da prendere. Il compito è portarla dentro al cerchio — non al centro
+  esatto: appena entra, il cerchio si accende in verde e l'hai in vista.
+  Sotto, quanti gradi mancano. Guida sia in rotazione (bussola) sia in alzata
+  (inclinazione), con calibrazione dell'orizzonte;
 - **segui un aereo**: la campanella nella scheda attiva un avviso in-app
   (banner + vibrazione + suono) quando quell'aereo sta per passarti vicino
   (entro ~2 minuti). Funziona con l'app aperta; le notifiche a schermo spento

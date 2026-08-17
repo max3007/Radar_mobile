@@ -1,79 +1,116 @@
 import { describe, it, expect } from 'vitest';
-import { guidaMira, LOCK_IN, LOCK_OUT } from '../src/funzioni/mira.js';
+import {
+  guidaMira, LOCK_IN, LOCK_OUT, RAGGIO_CERCHIO, RAGGIO_MAX
+} from '../src/funzioni/mira.js';
 
 // Scorciatoia: due assi, entrambi col sensore di inclinazione disponibile.
 function g(diffAz, diffEl, eraAgganciato = false) {
-  return guidaMira(diffAz, diffEl, true, eraAgganciato, null);
+  return guidaMira(diffAz, diffEl, true, eraAgganciato);
 }
 
-describe('Isteresi: aggancio e sgancio', () => {
-  // Il motivo per cui le soglie sono due e non una: con una sola, sul bordo
-  // il cerchio alternava di continuo tra "allineato" e "non allineato" a ogni
-  // micro-movimento della mano. La differenza si vede solo passando per uno
-  // stato precedente, cioe' proprio quello che un test puo fare e un occhio no.
+/** Quanto dista dal centro l'aereo disegnato, in percentuale del riquadro. */
+function raggio(r) {
+  return Math.hypot(r.aereoX - 50, r.aereoY - 50);
+}
 
-  it('si aggancia quando entrambi gli assi sono sotto la soglia stretta', () => {
+describe('Isteresi: quando l aereo e dentro il cerchio', () => {
+  // Il compito non e centrare l'aereo, e portarlo DENTRO il cerchio. Guardare
+  // il cielo a occhio non e mai preciso al grado, e chiedere una centratura
+  // perfetta renderebbe lo strumento nervoso senza aggiungere niente.
+  //
+  // Le soglie sono due e non una: con una sola, sul bordo l'indicazione
+  // alternava di continuo tra "dentro" e "fuori" a ogni micro-movimento della
+  // mano. La differenza si vede solo passando per uno stato precedente, cioe
+  // proprio quello che un test puo fare e un occhio no.
+
+  it('entra quando lo scarto complessivo sta sotto la soglia', () => {
     expect(g(3, 2).agganciato).toBe(true);
   });
 
-  it('non si aggancia se anche un solo asse e fuori', () => {
+  it('conta lo scarto sui DUE assi insieme, non uno alla volta', () => {
+    // 8 e 8 stanno sotto soglia presi singolarmente, ma insieme fanno 11.3:
+    // l'aereo e fuori dal cerchio, ed e li che si guarda.
+    expect(g(8, 8).agganciato).toBe(false);
     expect(g(3, 20).agganciato).toBe(false);
     expect(g(20, 3).agganciato).toBe(false);
   });
 
-  it('una volta agganciato non si sgancia nella zona intermedia', () => {
-    // 10 gradi: oltre LOCK_IN (8) ma sotto LOCK_OUT (15). Da fermo non
-    // aggancerebbe, ma se era gia agganciato deve restarci.
+  it('una volta dentro non esce nella zona intermedia', () => {
     const intermedio = (LOCK_IN + LOCK_OUT) / 2;
     expect(g(intermedio, 0, false).agganciato).toBe(false);
     expect(g(intermedio, 0, true).agganciato).toBe(true);
   });
 
-  it('si sgancia solo oltre la soglia larga', () => {
+  it('esce solo oltre la soglia larga', () => {
     expect(g(LOCK_OUT + 1, 0, true).agganciato).toBe(false);
   });
 });
 
-describe('Dove punta la freccia', () => {
+describe('Dove viene disegnato l aereo', () => {
+  it('al centro quando non c e niente da correggere', () => {
+    const r = g(0, 0);
+    expect(r.aereoX).toBeCloseTo(50, 5);
+    expect(r.aereoY).toBeCloseTo(50, 5);
+  });
+
+  it('alla soglia di aggancio tocca esattamente il bordo del cerchio', () => {
+    // E l'ancoraggio che tiene insieme grafica e logica: se la curva e il
+    // raggio del cerchio divergessero, l'aereo si accenderebbe di verde
+    // mentre e ancora visibilmente fuori — o viceversa.
+    expect(raggio(g(LOCK_IN, 0))).toBeCloseTo(RAGGIO_CERCHIO, 5);
+    expect(raggio(g(0, LOCK_IN))).toBeCloseTo(RAGGIO_CERCHIO, 5);
+  });
+
+  it('dentro il cerchio quando e agganciato, fuori quando non lo e', () => {
+    expect(raggio(g(4, 3))).toBeLessThan(RAGGIO_CERCHIO);
+    expect(raggio(g(20, 0))).toBeGreaterThan(RAGGIO_CERCHIO);
+  });
+
+  it('a destra se il bersaglio e a destra, in alto se e piu alto', () => {
+    expect(g(30, 0).aereoX).toBeGreaterThan(50);
+    expect(g(-30, 0).aereoX).toBeLessThan(50);
+    // Sullo schermo Y cresce verso il basso: piu in alto = valore minore
+    expect(g(0, 30).aereoY).toBeLessThan(50);
+    expect(g(0, -30).aereoY).toBeGreaterThan(50);
+  });
+
+  it('non esce mai dal riquadro, nemmeno col bersaglio alle spalle', () => {
+    // Il difetto del vecchio mirino: oltre i 60 gradi il bersaglio restava
+    // appiccicato al bordo e smetteva di dire qualcosa. Qui la curva e
+    // compressiva, quindi l'aereo resta sempre dentro e sempre visibile.
+    for (const [az, el] of [[179, 0], [-179, 0], [90, 90], [-120, -160]]) {
+      expect(raggio(g(az, el))).toBeLessThan(RAGGIO_MAX);
+    }
+  });
+
+  it('piu lontano e il bersaglio, piu lontano dal centro sta l aereo', () => {
+    const vicino = raggio(g(5, 0));
+    const medio = raggio(g(30, 0));
+    const lontano = raggio(g(120, 0));
+    expect(vicino).toBeLessThan(medio);
+    expect(medio).toBeLessThan(lontano);
+  });
+});
+
+describe('Come e orientato l aereo', () => {
   // Convenzione: 0 = su, 90 = destra, 180 = giu, -90 = sinistra. E la stessa
   // di rotate() in CSS, cosi il valore va usato tale e quale senza conversioni
   // a meta strada — che sono il posto dove un segno si perde.
 
-  it('in alto se il bersaglio e piu alto', () => {
-    expect(g(0, 30).angoloFreccia).toBe(0);
+  it('col muso nella direzione in cui devi girarti', () => {
+    for (const [az, el, atteso] of [[0, 30, 0], [30, 0, 90], [-30, 0, -90], [30, 30, 45]]) {
+      expect(g(az, el).angoloAereo).toBe(atteso);
+    }
   });
 
-  it('a destra se il bersaglio e a destra', () => {
-    expect(g(30, 0).angoloFreccia).toBe(90);
+  it('in basso se il bersaglio e sotto', () => {
+    expect(Math.abs(g(0, -30).angoloAereo)).toBe(180);
   });
 
-  it('in basso se il bersaglio e piu in basso', () => {
-    expect(Math.abs(g(0, -30).angoloFreccia)).toBe(180);
-  });
-
-  it('a sinistra se il bersaglio e a sinistra', () => {
-    expect(g(-30, 0).angoloFreccia).toBe(-90);
-  });
-
-  it('in diagonale quando serve correggere su entrambi gli assi', () => {
-    // Stessa quantita sui due assi: esattamente a 45 gradi
-    expect(g(30, 30).angoloFreccia).toBe(45);
-    expect(g(-30, 30).angoloFreccia).toBe(-45);
-    expect(g(30, -30).angoloFreccia).toBe(135);
-  });
-
-  it('indica la direzione anche con l aereo dietro le spalle', () => {
-    // Il difetto del vecchio mirino mobile: oltre i 60 gradi il bersaglio
-    // restava appiccicato al bordo, quindi proprio quando sei piu disorientato
-    // smetteva di dire qualcosa di utile. La freccia no.
-    const dietro = g(170, 0);
-    expect(dietro.angoloFreccia).toBe(90);      // gira a destra
-    expect(dietro.distanzaGradi).toBe(170);     // e ti dice quanto
-  });
-
-  it('agganciato non indica nessuna direzione', () => {
-    // Quando ci sei, una freccia che punta da qualche parte confonde.
-    expect(g(2, 2, true).angoloFreccia).toBe(0);
+  it('si raddrizza quando e dentro il cerchio', () => {
+    // Non c'e piu nessuna direzione da prendere: un muso ancora storto
+    // direbbe "gira di la" proprio mentre l'app dice "ci sei".
+    expect(g(3, 2, true).angoloAereo).toBe(0);
   });
 });
 
@@ -100,56 +137,25 @@ describe('Quanti gradi mancano', () => {
   });
 });
 
-describe('Cosa dice all utente', () => {
-  it('indica il verso della rotazione e di quanto', () => {
-    expect(g(30, 0)).toMatchObject({ statoKey: 'mira.right', statoParams: { n: 30 } });
-    expect(g(-30, 0)).toMatchObject({ statoKey: 'mira.left', statoParams: { n: 30 } });
-  });
-
-  it('indica se alzare o abbassare', () => {
-    expect(g(0, 30)).toMatchObject({ subKey: 'mira.up', subParams: { n: 30 } });
-    expect(g(0, -30)).toMatchObject({ subKey: 'mira.down', subParams: { n: 30 } });
-  });
-
-  it('dice che un asse e a posto anche se l altro no', () => {
-    // Le due righe ci sono sempre entrambe: cosi l'altezza del blocco non
-    // cambia mai e niente trasla mentre lo si sta seguendo.
-    const r = g(2, 40);
-    expect(r.statoKey).toBe('mira.rotOk');
-    expect(r.subKey).toBe('mira.up');
-  });
-
-  it('restituisce chiavi di traduzione, non frasi', () => {
-    // Se restituisse testo tradotto, il mirino resterebbe nella lingua in cui
-    // e stato aperto. E il difetto che abbiamo gia corretto altrove.
-    const r = g(30, 30);
-    expect(r.statoKey).toMatch(/^mira\./);
-    expect(r.subKey).toMatch(/^mira\./);
-  });
-});
-
 describe('Telefono senza sensore di inclinazione', () => {
-  it('guida solo in rotazione e mostra l elevazione da raggiungere', () => {
-    const r = guidaMira(30, null, false, false, 42);
-    expect(r.statoKey).toBe('mira.right');
-    expect(r.subKey).toBe('mira.elevOf');
-    expect(r.subParams).toEqual({ v: '42°' });
+  it('muove l aereo solo in orizzontale, senza inventare una verticale', () => {
+    const destra = guidaMira(30, null, false, false);
+    expect(destra.aereoY).toBe(50);
+    expect(destra.aereoX).toBeGreaterThan(50);
+    expect(guidaMira(-30, null, false, false).aereoX).toBeLessThan(50);
   });
 
-  it('la freccia resta sull orizzontale, senza inventare una verticale', () => {
-    expect(guidaMira(30, null, false, false, 42).angoloFreccia).toBe(90);
-    expect(guidaMira(-30, null, false, false, 42).angoloFreccia).toBe(-90);
+  it('il muso resta sull orizzontale', () => {
+    expect(guidaMira(30, null, false, false).angoloAereo).toBe(90);
+    expect(guidaMira(-30, null, false, false).angoloAereo).toBe(-90);
   });
 
   it('i gradi contano solo la rotazione, non una precisione che non abbiamo', () => {
-    expect(guidaMira(41, null, false, false, 42).distanzaGradi).toBe(41);
+    expect(guidaMira(41, null, false, false).distanzaGradi).toBe(41);
   });
 
-  it('con elevazione sconosciuta lo dichiara invece di inventare', () => {
-    expect(guidaMira(30, null, false, false, null).subParams).toEqual({ v: '--' });
-  });
-
-  it('senza inclinazione l aggancio dipende dalla sola rotazione', () => {
-    expect(guidaMira(2, null, false, false, 10).agganciato).toBe(true);
+  it('l aggancio dipende dalla sola rotazione', () => {
+    expect(guidaMira(2, null, false, false).agganciato).toBe(true);
+    expect(guidaMira(30, null, false, false).agganciato).toBe(false);
   });
 });
